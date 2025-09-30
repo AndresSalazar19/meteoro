@@ -81,11 +81,11 @@ const Asteroid3DViewer = () => {
 
     // Asteroides y órbitas
     const asteroids = [
-      { name: 'Apophis', a: 138, e: 0.191, i: 3.3, size: 0.37, color: 0xaa6644 },
-      { name: 'Bennu', a: 168, e: 0.204, i: 6.0, size: 0.49, color: 0x887755 },
-      { name: 'Ryugu', a: 180, e: 0.190, i: 5.9, size: 0.90, color: 0x776655 },
+      { name: 'Apophis', a: 50, e: 0.191, i: 3.3, size: 0.37, color: 0xaa6644 },
+      { name: 'Bennu', a: 68, e: 0.204, i: 6.0, size: 0.49, color: 0x887755 },
+      { name: 'Ryugu', a: 80, e: 0.190, i: 5.9, size: 0.90, color: 0x776655 },
       { name: '2024 PT5', a: 95, e: 0.28, i: 8.2, size: 0.011, color: 0xccaa88 },
-      { name: 'Didymos', a: 215, e: 0.384, i: 3.4, size: 0.78, color: 0x998877 }
+      { name: 'Didymos', a: 115, e: 0.384, i: 3.4, size: 0.78, color: 0x998877 }
     ];
 
     const orbitGroup = new THREE.Group();
