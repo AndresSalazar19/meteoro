@@ -24,19 +24,48 @@ const Asteroid3DViewer = () => {
     renderer.setSize(mount.clientWidth, mount.clientHeight);
     mount.appendChild(renderer.domElement);
 
-    // Earth
+    // Luz direccional y ambiental para ver la textura
+    const ambientLight = new THREE.AmbientLight(0xffffff, 0.5);
+    scene.add(ambientLight);
+    const directionalLight = new THREE.DirectionalLight(0xffffff, 1);
+    directionalLight.position.set(10, 10, 10);
+    scene.add(directionalLight);
+
+    // Earth con textura realista
     const earthGeometry = new THREE.SphereGeometry(6.371, 64, 64);
-    const earthMaterial = new THREE.MeshPhongMaterial({
-      color: 0x2233ff,
-      emissive: 0x112244,
-      shininess: 25,
-      specular: 0x333333
-    });
-    const earth = new THREE.Mesh(earthGeometry, earthMaterial);
-    earth.castShadow = true;
-    earth.receiveShadow = true;
-    earth.userData = { name: 'Earth', type: 'planet', radius: 6371 };
-    scene.add(earth);
+    const textureLoader = new THREE.TextureLoader();
+    let earthMaterial;
+    let earth;
+    textureLoader.load(
+      '/earthmap.jpg',
+      (texture) => {
+        earthMaterial = new THREE.MeshPhongMaterial({
+          map: texture,
+          shininess: 25,
+          specular: 0x333333
+        });
+        earth = new THREE.Mesh(earthGeometry, earthMaterial);
+        earth.castShadow = true;
+        earth.receiveShadow = true;
+        earth.userData = { name: 'Earth', type: 'planet', radius: 6371 };
+        scene.add(earth);
+      },
+      undefined,
+      (err) => {
+        // Si falla la textura, usar color por defecto
+        earthMaterial = new THREE.MeshPhongMaterial({
+          color: 0x2233ff,
+          shininess: 25,
+          specular: 0x333333
+        });
+        earth = new THREE.Mesh(earthGeometry, earthMaterial);
+        earth.castShadow = true;
+        earth.receiveShadow = true;
+        earth.userData = { name: 'Earth', type: 'planet', radius: 6371 };
+        scene.add(earth);
+        console.error('No se pudo cargar la textura de la Tierra:', err);
+      }
+    );
     
     // Cubo 
     const geometry = new THREE.BoxGeometry(1, 1, 1);
@@ -105,6 +134,11 @@ const Asteroid3DViewer = () => {
     const animate = () => {
       cube.rotation.x += 0.01;
       cube.rotation.y += 0.01;
+
+      // Rotar la Tierra si existe
+      if (earth) {
+        earth.rotation.y += 0.003;
+      }
 
       // Actualiza la posición de la cámara según los ángulos
       camera.position.x = cameraDistance * Math.sin(cameraRotation.phi) * Math.sin(cameraRotation.theta);
