@@ -18,7 +18,7 @@ const Asteroid3DViewer = () => {
       1000
     );
     // Variable para controlar la distancia de la cámara
-    let cameraDistance = 5;
+    let cameraDistance = 100;
     camera.position.z = cameraDistance;
     const renderer = new THREE.WebGLRenderer({ antialias: true });
     renderer.setSize(mount.clientWidth, mount.clientHeight);
@@ -67,11 +67,72 @@ const Asteroid3DViewer = () => {
       }
     );
     
-    // Cubo 
-    const geometry = new THREE.BoxGeometry(1, 1, 1);
-    const material = new THREE.MeshBasicMaterial({ color: 0x00ff00 });
-    const cube = new THREE.Mesh(geometry, material);
-    scene.add(cube);
+
+    // Atmosfera de la Tierra
+    const atmosphereGeometry = new THREE.SphereGeometry(6.8, 64, 64);
+    const atmosphereMaterial = new THREE.MeshBasicMaterial({
+      color: 0x4488ff,
+      transparent: true,
+      opacity: 0.15,
+      side: THREE.BackSide
+    });
+    const atmosphere = new THREE.Mesh(atmosphereGeometry, atmosphereMaterial);
+    scene.add(atmosphere);
+
+    // Asteroides y órbitas
+    const asteroids = [
+      { name: 'Apophis', a: 138, e: 0.191, i: 3.3, size: 0.37, color: 0xaa6644 },
+      { name: 'Bennu', a: 168, e: 0.204, i: 6.0, size: 0.49, color: 0x887755 },
+      { name: 'Ryugu', a: 180, e: 0.190, i: 5.9, size: 0.90, color: 0x776655 },
+      { name: '2024 PT5', a: 95, e: 0.28, i: 8.2, size: 0.011, color: 0xccaa88 },
+      { name: 'Didymos', a: 215, e: 0.384, i: 3.4, size: 0.78, color: 0x998877 }
+    ];
+
+    const orbitGroup = new THREE.Group();
+    scene.add(orbitGroup);
+    const asteroidMeshes = [];
+
+    asteroids.forEach((data) => {
+      // Calcular puntos de la órbita elíptica
+      const orbitPoints = [];
+      const segments = 128;
+      for (let j = 0; j <= segments; j++) {
+        const theta = (j / segments) * Math.PI * 2;
+        const r = (data.a * (1 - data.e * data.e)) / (1 + data.e * Math.cos(theta));
+        const x = r * Math.cos(theta);
+        const z = r * Math.sin(theta);
+        const y = z * Math.sin(data.i * Math.PI / 180);
+        const zAdjusted = z * Math.cos(data.i * Math.PI / 180);
+        orbitPoints.push(new THREE.Vector3(x, y, zAdjusted));
+      }
+      // Línea de la órbita
+      const orbitGeometry = new THREE.BufferGeometry().setFromPoints(orbitPoints);
+      const orbitMaterial = new THREE.LineBasicMaterial({ 
+        color: data.color, 
+        transparent: true, 
+        opacity: 0.4 
+      });
+      const orbitLine = new THREE.Line(orbitGeometry, orbitMaterial);
+      orbitGroup.add(orbitLine);
+      // Asteroide
+      const asteroidGeometry = new THREE.SphereGeometry(data.size * 5, 16, 16);
+      const asteroidMaterial = new THREE.MeshPhongMaterial({ 
+        color: data.color,
+        shininess: 5
+      });
+      const asteroid = new THREE.Mesh(asteroidGeometry, asteroidMaterial);
+      // Posición inicial
+      asteroid.userData = {
+        name: data.name,
+        type: 'asteroid',
+        orbit: data,
+        orbitPoints,
+        currentIndex: 0
+      };
+      asteroid.position.copy(orbitPoints[0]);
+      scene.add(asteroid);
+      asteroidMeshes.push(asteroid);
+    });
 
     const starsGeometry = new THREE.BufferGeometry();
     const starsMaterial = new THREE.PointsMaterial({ 
@@ -120,8 +181,8 @@ const Asteroid3DViewer = () => {
     const onWheel = (e) => {
       e.preventDefault();
       // Ajusta la distancia de la cámara con el scroll
-      cameraDistance += e.deltaY * 0.01;
-      cameraDistance = Math.max(2, Math.min(50, cameraDistance)); // Limita el zoom
+  cameraDistance += e.deltaY * 0.1;
+  cameraDistance = Math.max(20, Math.min(150, cameraDistance)); // Alejamiento de cámara
     };
 
     renderer.domElement.addEventListener('mousedown', onMouseDown);
@@ -132,13 +193,22 @@ const Asteroid3DViewer = () => {
     // Animación
     let animationId;
     const animate = () => {
-      cube.rotation.x += 0.01;
-      cube.rotation.y += 0.01;
-
       // Rotar la Tierra si existe
       if (earth) {
         earth.rotation.y += 0.003;
       }
+
+      // Animar asteroides en sus órbitas
+      asteroidMeshes.forEach(asteroid => {
+        const points = asteroid.userData.orbitPoints;
+        if (points) {
+          asteroid.userData.currentIndex = (asteroid.userData.currentIndex + 0.2) % points.length;
+          const pos = points[Math.floor(asteroid.userData.currentIndex)];
+          asteroid.position.copy(pos);
+          asteroid.rotation.x += 0.01;
+          asteroid.rotation.y += 0.02;
+        }
+      });
 
       // Actualiza la posición de la cámara según los ángulos
       camera.position.x = cameraDistance * Math.sin(cameraRotation.phi) * Math.sin(cameraRotation.theta);
