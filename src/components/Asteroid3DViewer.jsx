@@ -202,6 +202,8 @@ const Asteroid3DViewer = () => {
         }else{
           console.log("No hay nada :c")
         }
+
+
         asteroid.position.copy(orbitPoints[0]);
         scene.add(asteroid);
         asteroidMeshes.push(asteroid);
@@ -237,13 +239,48 @@ const Asteroid3DViewer = () => {
             const orbital = neo.orbital_data || {};
             // Evitamos leer close_approach_data (no lo usamos) simplemente ignorándolo
             const diameter = neo.estimated_diameter?.kilometers?.estimated_diameter_min;
+
+            // Diámetro y H
+            const diamMinKm = neo?.estimated_diameter?.kilometers?.estimated_diameter_min;
+            const diamMaxKm = neo?.estimated_diameter?.kilometers?.estimated_diameter_max;
+            const H = neo?.absolute_magnitude_h;
+
+            // Velocidad (km/s) approach más cercano a la Tierra
+            const vKms = pickVelocityKmsFromApproaches(neo?.close_approach_data || [], 'Earth');
+
+            // Severidad (si hay velocidad)
+            let energyMt = null;
+            let severity = null;
+            let diameterKmUsed = null;
+            
+
+            if (vKms && vKms > 0) {
+              const eCalc = computeEnergyMt({ diamMinKm, diamMaxKm, H, velocityKms: vKms, densityKgM3: DEFAULT_DENSITY });
+              if (eCalc) {
+                energyMt = eCalc.energyMt;
+                severity = tierFromEnergyMt(energyMt);
+                diameterKmUsed = eCalc.diameterKm;
+              }
+            } else {
+              // si no hay velocidad, intenta al menos fijar el diámetro representativo para el tamaño visual
+              diameterKmUsed = chooseDiameterKm(diamMinKm, diamMaxKm, H);
+            }
+
+            const sizeKmForViz = typeof diameterKmUsed === 'number' ? diameterKmUsed : (typeof diamMinKm === 'number' ? diamMinKm : 0.05);
+
+
             const parsed = {
               name: neo.name || neo.designation || 'NEO',
               a: parseFloat(orbital.semi_major_axis) || 1, // AU
               e: parseFloat(orbital.eccentricity) || 0,
               i: parseFloat(orbital.inclination) || 0, // grados
               size: typeof diameter === 'number' ? diameter : 0.05, // km mínimos
-              color: randomColor()
+              
+              color: randomColor(),
+              energyMt,
+              severity,
+              velocityKms : vKms ?? null,
+              diameterKm : diameterKmUsed ?? null
             };
             detailed.push(parsed);
           } catch (err) {
