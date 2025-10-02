@@ -239,7 +239,7 @@ const Asteroid3DViewer = () => {
       e.preventDefault();
       // Ajusta la distancia de la cámara con el scroll
   cameraDistance += e.deltaY * 0.1;
-  cameraDistance = Math.max(20, Math.min(1000, cameraDistance)); // Alejamiento de cámara
+  cameraDistance = Math.max(20, Math.min(500, cameraDistance)); // Alejamiento de cámara
     };
 
     renderer.domElement.addEventListener('mousedown', onMouseDown);
