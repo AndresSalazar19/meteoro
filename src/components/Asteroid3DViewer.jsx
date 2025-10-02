@@ -138,7 +138,7 @@ const Asteroid3DViewer = () => {
 
     // Fetch de la API NASA NEO
     const controller = new AbortController();
-    const API_KEY = import.meta.env.VITE_NASA_API_KEY || 'DEMO_KEY';
+    const API_KEY = import.meta.env.VITE_NASA_API_KEY || '2KzpzDksQWT2D2csD9Ja9wrdX8ruTcS290hH2mBK';
     const FEED_URL = `https://api.nasa.gov/neo/rest/v1/feed?start_date=2015-09-07&end_date=2015-09-08&api_key=${API_KEY}`;
 
     const fetchAsteroids = async () => {
@@ -239,7 +239,7 @@ const Asteroid3DViewer = () => {
       e.preventDefault();
       // Ajusta la distancia de la cámara con el scroll
   cameraDistance += e.deltaY * 0.1;
-  cameraDistance = Math.max(20, Math.min(150, cameraDistance)); // Alejamiento de cámara
+  cameraDistance = Math.max(20, Math.min(1000, cameraDistance)); // Alejamiento de cámara
     };
 
     renderer.domElement.addEventListener('mousedown', onMouseDown);
