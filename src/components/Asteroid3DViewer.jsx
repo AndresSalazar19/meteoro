@@ -86,6 +86,66 @@ const Asteroid3DViewer = () => {
 
     // Escalado: semi_major_axis (AU) * ORBIT_SCALE -> unidades de la escena
     const ORBIT_SCALE = 100; // Ajusta este número para separar más / menos las órbitas
+    
+    //Constantes para calcular la Severidad
+    const DEFAULT_DENSITY = 2500;
+    const J_PER_MT = 4.184e15;    // joules por megatón TNT
+
+    //Aproximar diametro mediante el brillo de un objeto en caso de no tener informacion
+    const estimateDiameterFromH = (H, albedo = 0.14) => {
+      if (typeof H !== 'number') return null;
+      return (1329 / Math.sqrt(albedo)) * Math.pow(10, -H / 5);
+    };
+
+    //Escoger mejor diametro para cada caso
+    const chooseDiameterKm = (diamMinKm, diamMaxKm, H, albedo = 0.14) => {
+      const a = typeof diamMinKm === 'number' && diamMinKm > 0 ? diamMinKm : null;
+      const b = typeof diamMaxKm === 'number' && diamMaxKm > 0 ? diamMaxKm : null;
+      if (a && b) return Math.sqrt(a * b); // media geométrica
+      if (a) return a;
+      if (b) return b;
+      const dH = estimateDiameterFromH(H, albedo);
+      return typeof dH === 'number' && dH > 0 ? dH : 0.05; // fallback pequeño
+    };
+
+    // Tomar una velocidad representativa (km/s) del acercamiento mas proximo a la Tierra
+    const pickVelocityKmsFromApproaches = (approaches, preferOrbitingBody = 'Earth') => {
+      if (!Array.isArray(approaches) || approaches.length === 0) return null;
+      const filtered = preferOrbitingBody
+        ? approaches.filter(a => a?.orbiting_body === preferOrbitingBody)
+        : approaches;
+      const candidates = filtered.length ? filtered : approaches;
+      const sorted = [...candidates].sort((a, b) => {
+        const ka = parseFloat(a?.miss_distance?.kilometers ?? 'Infinity');
+        const kb = parseFloat(b?.miss_distance?.kilometers ?? 'Infinity');
+        return ka - kb;
+      });
+      const top = sorted[0];
+      const v = parseFloat(top?.relative_velocity?.kilometers_per_second ?? 'NaN');
+      return Number.isFinite(v) ? v : null;
+    };
+
+    // Calcular energía cinecita (Megatones) desde diámetro (km) y velocidad (km/s)
+    const computeEnergyMt = ({ diamMinKm, diamMaxKm, H, velocityKms, densityKgM3 = DEFAULT_DENSITY }) => {
+      if (!(velocityKms > 0)) return null;
+      const diameterKm = chooseDiameterKm(diamMinKm, diamMaxKm, H);
+      const radiusM = (diameterKm * 1000) / 2;
+      const volumeM3 = (4 / 3) * Math.PI * Math.pow(radiusM, 3);
+      const massKg = densityKgM3 * volumeM3;
+      const velocityMs = velocityKms * 1000;
+      const energyJ = 0.5 * massKg * velocityMs * velocityMs;
+      const energyMt = energyJ / J_PER_MT;
+      return { energyMt, diameterKm, velocityKms };
+    };
+
+    const tierFromEnergyMt = (E) => {
+      if (E == null) return null;
+      if (E >= 100) return 'HIGH';
+      if (E >= 1) return 'MEDIUM';
+      return 'LOW';
+    };
+
+
 
     const randomColor = () => Math.floor(Math.random() * 0xffffff);
 
@@ -128,8 +188,20 @@ const Asteroid3DViewer = () => {
           type: 'asteroid',
           orbit: data,
           orbitPoints,
-          currentIndex: 0
+          currentIndex: 0,
+          energyMt: data.energyMt ?? null,
+          severity: data.severity ?? null,
+          velocityKms: data.velocityKms ?? null,
+          diameterKm: data.diameterKm ?? null
         };
+        //comprobar
+        if (data.energyMt != null) {
+          console.log(
+            `[SEVERITY] ${data.name} | E≈${data.energyMt.toFixed(2)} Mt | v≈${(data.velocityKms??0).toFixed(2)} km/s | D≈${(data.diameterKm??0).toFixed(3)} km | ${data.severity}`
+          );
+        }else{
+          console.log("No hay nada :c")
+        }
         asteroid.position.copy(orbitPoints[0]);
         scene.add(asteroid);
         asteroidMeshes.push(asteroid);
@@ -180,6 +252,7 @@ const Asteroid3DViewer = () => {
           }
         }
         if (detailed.length) {
+          console.log(detailed)
           addAsteroidsToScene(detailed);
         }
       } catch (e) {
@@ -279,7 +352,7 @@ const Asteroid3DViewer = () => {
     animate();
 
     // Limpieza al desmontar el componente
-    return () => {
+    return () => {  
       controller.abort();
       cancelAnimationFrame(animationId);
       renderer.domElement.removeEventListener('mousedown', onMouseDown);
