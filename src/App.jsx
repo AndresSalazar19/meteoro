@@ -1,11 +1,14 @@
 import React from 'react';
 import Asteroid3DViewer from './components/Asteroid3DViewer';
+import AppRoutes from './routes/appRoutes';
+import { BrowserRouter } from 'react-router-dom';
 
 function App() {
+  
   return (
-    <div className="w-full h-screen">
-      <Asteroid3DViewer />
-    </div>
+    <BrowserRouter>
+      <AppRoutes />
+    </BrowserRouter>
   );
 }
 
