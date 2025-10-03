@@ -5,13 +5,96 @@ import * as THREE from 'three';
 
 const Asteroid3DViewer = () => {
   const mountRef = useRef(null);
+  const cameraRef = useRef(null);
+  const earthRef = useRef(null);
+  const earthRotationRef = useRef(true);
+  const cameraTransitionRef = useRef({ active: false,
+  fromPos: new THREE.Vector3(),
+  toPos: new THREE.Vector3(),
+  fromLook: new THREE.Vector3(),
+  toLook: new THREE.Vector3(),
+  progress: 0,
+  duration: 100 });
+  const asteroidMeshesRef = useRef([]);
+  const simulationModeRef = useRef('orbit');
+  const threatAsteroidRef = useRef(null);
+
+  const onAsteroidClick = (asteroid) => {
+    if (!asteroid) {
+      console.log('Asteroide no encontrado');
+      return;
+    }
+    
+    const direction = new THREE.Vector3().subVectors(
+      new THREE.Vector3(0,0,0), // punto de impacto
+      asteroid.position
+    ).normalize();
+
+    const cameraTargetPos = asteroid.position.clone().add(direction.clone().multiplyScalar(-10)); // 50 unidades detrás
+    const cameraTargetLook = new THREE.Vector3(0, 0, 0); // mira al punto de impacto
+
+    // Inicializa transición de cámara
+    cameraTransitionRef.current = {
+      active: true,
+      fromPos: cameraRef.current.position.clone(),
+      toPos: cameraTargetPos,
+      fromLook: new THREE.Vector3().copy(cameraRef.current.getWorldDirection(new THREE.Vector3())).add(cameraRef.current.position),
+      toLook: cameraTargetLook,
+      progress: 0,
+      duration: 100
+    };
+
+    // Guardar el meteorito para simular después
+    threatAsteroidRef.current = asteroid;
+  };
+
+  const initializeImpact = (asteroid) => {
+    if (!asteroid) return;
+    console.log('Iniciando simulación con:', asteroid.userData.name);
+    // calcular trayectoria de impacto
+    asteroid.userData.impactPath = {
+      start: asteroid.position.clone(),
+      target: new THREE.Vector3(0, 0, 0),
+      progress: 0,
+      impactDone: false
+    };
+    asteroid.userData.isImpacting = true;
+
+    const maxPoints = 1000;
+    const positions = new Float32Array(maxPoints * 3);
+    const trailGeometry = new THREE.BufferGeometry();
+    trailGeometry.setAttribute('position', new THREE.BufferAttribute(positions, 3));
+    const trailMaterial = new THREE.LineBasicMaterial({ color: 0xffff00 });
+    const trailLine = new THREE.Line(trailGeometry, trailMaterial);
+    earthRef.current.parent.add(trailLine);
+    asteroid.userData.trail = { positions, currentIndex: 0, maxPoints, geometry: trailGeometry, line: trailLine };
+  }
+
+  const reiniciar = () => {
+    // Detener simulación
+    simulationModeRef.current = "orbit";
+    // Reiniciar la Tierra a rotación normal
+    earthRotationRef.current = true;
+
+    // Reiniciar asteroides
+    asteroidMeshesRef.current.forEach(ast => {
+      if (ast.userData.impactPath) {
+        ast.userData.isImpacting = false;
+        ast.userData.impactPath = null;
+        ast.userData.trail?.line?.parent?.remove(ast.userData.trail.line);
+        ast.userData.trail = null;
+        ast.position.copy(ast.userData.orbitPoints[0]);
+      }
+    });
+    threatAsteroidRef.current = null;
+  }
 
   useEffect(() => {
     const mount = mountRef.current;
     if (!mount) return;
     // Escena, cámara y renderizador
     const scene = new THREE.Scene();
-    const camera = new THREE.PerspectiveCamera(
+    cameraRef.current = new THREE.PerspectiveCamera(
       75,
       mount.clientWidth / mount.clientHeight,
       0.1,
@@ -19,7 +102,7 @@ const Asteroid3DViewer = () => {
     );
     // Variable para controlar la distancia de la cámara
     let cameraDistance = 100;
-    camera.position.z = cameraDistance;
+    cameraRef.current.position.z = cameraDistance;
     const renderer = new THREE.WebGLRenderer({ antialias: true });
     renderer.setSize(mount.clientWidth, mount.clientHeight);
     mount.appendChild(renderer.domElement);
@@ -49,6 +132,7 @@ const Asteroid3DViewer = () => {
         earth.receiveShadow = true;
         earth.userData = { name: 'Earth', type: 'planet', radius: 6371 };
         scene.add(earth);
+        earthRef.current = earth; // referencia global del mesh
       },
       undefined,
       (err) => {
@@ -58,12 +142,13 @@ const Asteroid3DViewer = () => {
           shininess: 25,
           specular: 0x333333
         });
-        earth = new THREE.Mesh(earthGeometry, earthMaterial);
+        const earth = new THREE.Mesh(earthGeometry, earthMaterial);
         earth.castShadow = true;
         earth.receiveShadow = true;
         earth.userData = { name: 'Earth', type: 'planet', radius: 6371 };
         scene.add(earth);
         console.error('No se pudo cargar la textura de la Tierra:', err);
+        earthRef.current = earth;
       }
     );
     
@@ -82,7 +167,6 @@ const Asteroid3DViewer = () => {
     // Grupo para órbitas y arreglo para guardar meshes dinámicos
     const orbitGroup = new THREE.Group();
     scene.add(orbitGroup);
-    const asteroidMeshes = [];
 
     // Escalado: semi_major_axis (AU) * ORBIT_SCALE -> unidades de la escena
     const ORBIT_SCALE = 100; // Ajusta este número para separar más / menos las órbitas
@@ -132,15 +216,14 @@ const Asteroid3DViewer = () => {
         };
         asteroid.position.copy(orbitPoints[0]);
         scene.add(asteroid);
-        asteroidMeshes.push(asteroid);
+        asteroidMeshesRef.current.push(asteroid);
       });
     };
 
     // Fetch de la API NASA NEO
     const controller = new AbortController();
     const API_KEY = import.meta.env.VITE_NASA_API_KEY || '2KzpzDksQWT2D2csD9Ja9wrdX8ruTcS290hH2mBK';
-    const FEED_URL = `https://api.nasa.gov/neo/rest/v1/feed?start_date=2015-09-07&end_date=2015-09-08&api_key=${API_KEY}`;
-
+    const FEED_URL = `https://api.nasa.gov/neo/rest/v1/feed?start_date=2032-12-19&end_date=2032-12-26&api_key=${API_KEY}`;
     const fetchAsteroids = async () => {
       try {
         const res = await fetch(FEED_URL, { signal: controller.signal });
@@ -186,7 +269,7 @@ const Asteroid3DViewer = () => {
         if (e.name !== 'AbortError') {
           console.error('Fallo obteniendo asteroides NASA:', e);
         }
-      }
+      } 
     };
 
     fetchAsteroids();
@@ -251,29 +334,100 @@ const Asteroid3DViewer = () => {
     let animationId;
     const animate = () => {
       // Rotar la Tierra si existe
-      if (earth) {
-        earth.rotation.y += 0.003;
+      if (earthRef.current && earthRotationRef.current) {
+        earthRef.current.rotation.y += 0.003;
       }
 
       // Animar asteroides en sus órbitas
-      asteroidMeshes.forEach(asteroid => {
-        const points = asteroid.userData.orbitPoints;
-        if (points) {
-          asteroid.userData.currentIndex = (asteroid.userData.currentIndex + 0.2) % points.length;
-          const pos = points[Math.floor(asteroid.userData.currentIndex)];
-          asteroid.position.copy(pos);
-          asteroid.rotation.x += 0.01;
-          asteroid.rotation.y += 0.02;
-        }
+      asteroidMeshesRef.current.forEach(asteroid => {
+          if(!asteroid.userData.isImpacting) { // no se mueve el que va a impactar
+            const points = asteroid.userData.orbitPoints;
+            if (points) {
+              asteroid.userData.currentIndex = (asteroid.userData.currentIndex + 0.2) % points.length;
+              const pos = points[Math.floor(asteroid.userData.currentIndex)];
+              asteroid.position.copy(pos);
+              asteroid.rotation.x += 0.01;
+              asteroid.rotation.y += 0.02;
+            }
+          }
       });
+      if(threatAsteroidRef.current){
+        // Modo impacto
+        const threat = threatAsteroidRef.current;
+        const path = threat.userData.impactPath;
+        if (path && path.progress < 1) {
+          path.progress += 0.005;
+          
+          threat.position.lerpVectors(
+            path.start,
+            path.target,
+            path.progress
+          );
+          
+          const trail = threat.userData.trail;
+          if (trail && trail.currentIndex < trail.maxPoints) {
+            trail.positions[trail.currentIndex * 3]     = threat.position.x;
+            trail.positions[trail.currentIndex * 3 + 1] = threat.position.y;
+            trail.positions[trail.currentIndex * 3 + 2] = threat.position.z;
+            trail.currentIndex++;
+            trail.geometry.setDrawRange(0, trail.currentIndex);
+            trail.geometry.attributes.position.needsUpdate = true;
+          }
+          
+          // Cambiar color a rojo
+          const intensity = path.progress;
+          threat.material.color.setRGB(1, 1 - intensity, 1 - intensity);
 
-      // Actualiza la posición de la cámara según los ángulos
-      camera.position.x = cameraDistance * Math.sin(cameraRotation.phi) * Math.sin(cameraRotation.theta);
-      camera.position.y = cameraDistance * Math.cos(cameraRotation.phi);
-      camera.position.z = cameraDistance * Math.sin(cameraRotation.phi) * Math.cos(cameraRotation.theta);
-      camera.lookAt(0, 0, 0);
+          // Cámara detrás del meteorito
+          const direction = new THREE.Vector3().subVectors(path.target, path.start).normalize();
+          const cameraOffset = direction.clone().multiplyScalar(-10); // distancia detrás
+          cameraRef.current.position.copy(threat.position.clone().add(cameraOffset));
+          cameraRef.current.lookAt(path.target);
 
-      renderer.render(scene, camera);
+        } else if (path && path.progress >= 1 && !path.impactDone) {
+          console.log('¡IMPACTO!');
+          path.impactDone = true;
+
+          // Volver al modo órbita después del impacto
+          simulationModeRef.current = "orbit";
+          earthRotationRef.current = false; // detiene la rotación de la Tierra
+        }
+       }
+
+      if (cameraTransitionRef.current.active) {
+        const t = cameraTransitionRef.current;
+        t.progress++;
+
+        const alpha = t.progress / t.duration;
+        cameraRef.current.position.lerpVectors(t.fromPos, t.toPos, alpha);
+
+        const look = new THREE.Vector3().lerpVectors(t.fromLook, t.toLook, alpha);
+        cameraRef.current.lookAt(look);
+
+        if (t.progress >= t.duration) {
+          t.active = false;
+          simulationModeRef.current = "impact";  // iniciar simulación
+          initializeImpact(threatAsteroidRef.current); 
+        }
+      } else if (simulationModeRef.current === "impact" && threatAsteroidRef.current) {
+        const threat = threatAsteroidRef.current;
+        const path = threat.userData.impactPath;
+        if (path) {
+          // Cámara detrás del meteorito
+          const direction = new THREE.Vector3().subVectors(path.target, path.start).normalize();
+          const cameraOffset = direction.clone().multiplyScalar(-10);
+          cameraRef.current.position.copy(threat.position.clone().add(cameraOffset));
+          cameraRef.current.lookAt(path.target);
+        }
+      } else {
+        // Modo libre (órbita)
+        cameraRef.current.position.x = cameraDistance * Math.sin(cameraRotation.phi) * Math.sin(cameraRotation.theta);
+        cameraRef.current.position.y = cameraDistance * Math.cos(cameraRotation.phi);
+        cameraRef.current.position.z = cameraDistance * Math.sin(cameraRotation.phi) * Math.cos(cameraRotation.theta);
+        cameraRef.current.lookAt(0, 0, 0);
+      }
+        
+      renderer.render(scene, cameraRef.current);
       animationId = requestAnimationFrame(animate);
     };
     animate();
@@ -292,12 +446,19 @@ const Asteroid3DViewer = () => {
       }
     };
   }, []);
-
+ 
   return (
-    <div
+    <>
+    <div>
+      <button onClick={() => onAsteroidClick(asteroidMeshesRef.current.find(a => a.userData.name === '(2024 YR4)'))}>Iniciar Simulación</button>
+      <br/>
+      <button onClick={reiniciar}>Reiniciar</button>
+    </div>
+   <div
       ref={mountRef}
       style={{ width: '100vw', height: '100vh', overflow: 'hidden' }}
     />
+   </>
   );
 };
 
