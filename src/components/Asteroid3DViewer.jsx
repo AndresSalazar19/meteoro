@@ -273,78 +273,86 @@ const Asteroid3DViewer = () => {
         const orbitLine = new THREE.Line(orbitGeometry, orbitMaterial);
         orbitGroup.add(orbitLine);
 
-        // Asteroide (size en km -> lo dejamos tal cual y lo multiplicamos para visibilidad)
-        const visualRadius = Math.max(data.size, 0.01) * 5; // evita que desaparezcan si son muy pequeños
-        const asteroidGeometry = new THREE.SphereGeometry(visualRadius, 16, 16);
-        const asteroidMaterial = new THREE.MeshPhongMaterial({
-          color: data.color,
-          shininess: 5
-        });
-        const asteroid = new THREE.Mesh(asteroidGeometry, asteroidMaterial);
-        asteroid.userData = {
-          name: data.name,
-          type: 'asteroid',
-          orbit: data,
-          orbitPoints,
-          currentIndex: 0
-        };
-        asteroid.position.copy(orbitPoints[0]);
-        scene.add(asteroid);
-        asteroidMeshesRef.current.push(asteroid);
+      // Asteroide: escala uniforme
+        let physicalRadiusKm = Math.max(data.size, MIN_ASTEROID_RADIUS_KM);
+        let radiusScene = physicalRadiusKm * ASTEROID_UNIFORM_SCALE;
+        if (radiusScene > MAX_SCENE_RADIUS) radiusScene = MAX_SCENE_RADIUS;
+        const asteroidGeometry = new THREE.SphereGeometry(radiusScene, 16, 16);
+              const asteroidMaterial = new THREE.MeshPhongMaterial({
+                color: data.color,
+                shininess: 5
+              });
+              const asteroid = new THREE.Mesh(asteroidGeometry, asteroidMaterial);
+              asteroid.userData = {
+                name: data.name,
+                type: 'asteroid',
+                orbit: data,
+                orbitPoints,
+                currentIndex: 0
+              };
+              asteroid.position.copy(orbitPoints[0]);
+              scene.add(asteroid);
+              asteroidMeshes.push(asteroid);
       });
     };
 
-    // Fetch de la API NASA NEO
-    const controller = new AbortController();
-    const API_KEY = import.meta.env.VITE_NASA_API_KEY || '2KzpzDksQWT2D2csD9Ja9wrdX8ruTcS290hH2mBK';
+  // Fetch de la API NASA NEO
+      const controller = new AbortController();
+      const API_KEY = import.meta.env.VITE_NASA_API_KEY || '2KzpzDksQWT2D2csD9Ja9wrdX8ruTcS290hH2mBK';
     const FEED_URL = `https://api.nasa.gov/neo/rest/v1/feed?start_date=2032-12-19&end_date=2032-12-26&api_key=${API_KEY}`;
-    const fetchAsteroids = async () => {
-      try {
-        const res = await fetch(FEED_URL, { signal: controller.signal });
-        if (!res.ok) throw new Error('Error al obtener feed NEO');
-        const feed = await res.json();
-        const byDate = feed.near_earth_objects || {};
-        const neoList = [];
-        Object.values(byDate).forEach((arr) => {
-          if (Array.isArray(arr)) neoList.push(...arr);
-        });
-        // Obtener links únicos (self)
-        const links = Array.from(new Set(neoList.map(n => n.links && n.links.self).filter(Boolean)));
 
-        // Descargas secuenciales (cantidad pequeña). Si fueran muchas, se puede limitar concurrencia.
-        const detailed = [];
-        for (const url of links) {
-          if (controller.signal.aborted) return;
-          try {
-            const r = await fetch(url, { signal: controller.signal });
-            if (!r.ok) continue;
-            const neo = await r.json();
-            const orbital = neo.orbital_data || {};
-            // Evitamos leer close_approach_data (no lo usamos) simplemente ignorándolo
-            const diameter = neo.estimated_diameter?.kilometers?.estimated_diameter_min;
-            const parsed = {
-              name: neo.name || neo.designation || 'NEO',
-              a: parseFloat(orbital.semi_major_axis) || 1, // AU
-              e: parseFloat(orbital.eccentricity) || 0,
-              i: parseFloat(orbital.inclination) || 0, // grados
-              size: typeof diameter === 'number' ? diameter : 0.05, // km mínimos
-              color: randomColor()
-            };
-            detailed.push(parsed);
-          } catch (err) {
-            // Ignora errores individuales
-            // console.error('Error NEO individual', err);
+      const fetchAsteroids = async () => {
+        try {
+          const res = await fetch(FEED_URL, { signal: controller.signal });
+          if (!res.ok) throw new Error('Error al obtener feed NEO');
+          const feed = await res.json();
+          const byDate = feed.near_earth_objects || {};
+          const neoList = [];
+          Object.values(byDate).forEach((arr) => {
+            if (Array.isArray(arr)) neoList.push(...arr);
+          });
+          // Obtener links únicos (self)
+          const links = Array.from(new Set(neoList.map(n => n.links && n.links.self).filter(Boolean)));
+
+          // Descargas secuenciales (cantidad pequeña). Si fueran muchas, se puede limitar concurrencia.
+          const detailed = [];
+          for (const url of links) {
+            if (controller.signal.aborted) return;
+            try {
+              const r = await fetch(url, { signal: controller.signal });
+              if (!r.ok) continue;
+              const neo = await r.json();
+              const orbital = neo.orbital_data || {};
+              const kmData = neo.estimated_diameter?.kilometers;
+              const dMin = kmData?.estimated_diameter_min;
+              const dMax = kmData?.estimated_diameter_max;
+              let avgDiameterKm;
+              avgDiameterKm = (dMin + dMax) / 2; // promedio de diámetros
+              const radiusKm = avgDiameterKm / 2;
+              const parsed = {
+                name: neo.name || neo.designation || 'NEO',
+                a: parseFloat(orbital.semi_major_axis) || 1, // AU
+                e: parseFloat(orbital.eccentricity) || 0,
+                i: parseFloat(orbital.inclination) || 0, // grados
+                // Guardamos en size el RADIO físico en km.
+                size: typeof radiusKm === 'number' ? radiusKm : 0.05,
+                color: randomColor()
+              };
+              detailed.push(parsed);
+            } catch (err) {
+              // Ignora errores individuales
+              // console.error('Error NEO individual', err);
+            }
+          }
+          if (detailed.length) {
+            addAsteroidsToScene(detailed);
+          }
+        } catch (e) {
+          if (e.name !== 'AbortError') {
+            console.error('Fallo obteniendo asteroides NASA:', e);
           }
         }
-        if (detailed.length) {
-          addAsteroidsToScene(detailed);
-        }
-      } catch (e) {
-        if (e.name !== 'AbortError') {
-          console.error('Fallo obteniendo asteroides NASA:', e);
-        }
-      } 
-    };
+      };
 
     fetchAsteroids();
 
@@ -410,6 +418,12 @@ const Asteroid3DViewer = () => {
       // Rotar la Tierra si existe
       if (earthRef.current && earthRotationRef.current) {
         earthRef.current.rotation.y += 0.003;
+      }
+      
+      // Órbita de la luna
+      moonOrbitPivot.rotation.y += moon_orbital_speed;
+      if (MOON_SYNC_ROTATION && moon) {
+        moon.rotation.y += moon_orbital_speed;
       }
 
       // Animar asteroides en sus órbitas
