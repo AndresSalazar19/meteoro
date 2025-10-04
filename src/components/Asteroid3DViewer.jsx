@@ -214,7 +214,7 @@ const Asteroid3DViewer = () => {
     moonOrbitPivot.add(moon);
 
     scene.add(orbitGroup);
-    const asteroidMeshes = [];
+    //const asteroidMeshes = [];
 
 
     // Añadir el sol -> Sigue una vista geocéntrica; la Tierra permanece en el origen
@@ -248,53 +248,54 @@ const Asteroid3DViewer = () => {
     const randomColor = () => Math.floor(Math.random() * 0xffffff);
 
     const addAsteroidsToScene = (dataList) => {
-      dataList.forEach((data) => {
-        const scaledA = data.a * ORBIT_SCALE;
-        // Calcular puntos de la órbita elíptica (ecuación de cónica)
-        const orbitPoints = [];
-        const segments = 128;
-        for (let j = 0; j <= segments; j++) {
-          const theta = (j / segments) * Math.PI * 2;
-            // r en unidades escaladas
-          const r = (scaledA * (1 - data.e * data.e)) / (1 + data.e * Math.cos(theta));
-          const x = r * Math.cos(theta);
-          const z = r * Math.sin(theta);
-          const y = z * Math.sin(data.i * Math.PI / 180);
-          const zAdjusted = z * Math.cos(data.i * Math.PI / 180);
-          orbitPoints.push(new THREE.Vector3(x, y, zAdjusted));
-        }
-        // Línea de la órbita
-        const orbitGeometry = new THREE.BufferGeometry().setFromPoints(orbitPoints);
-        const orbitMaterial = new THREE.LineBasicMaterial({
-          color: data.color,
-          transparent: true,
-          opacity: 0.4
-        });
-        const orbitLine = new THREE.Line(orbitGeometry, orbitMaterial);
-        orbitGroup.add(orbitLine);
+          dataList.forEach((data) => {
+      // a (semi-major axis en UA) -> escena
+      const scaledA = data.a * ORBIT_SCALE;
+            // Calcular puntos de la órbita elíptica (ecuación de cónica)
+            const orbitPoints = [];
+            const segments = 128;
+            for (let j = 0; j <= segments; j++) {
+              const theta = (j / segments) * Math.PI * 2;
+                // r en unidades escaladas
+              const r = (scaledA * (1 - data.e * data.e)) / (1 + data.e * Math.cos(theta));
+              const x = r * Math.cos(theta);
+              const z = r * Math.sin(theta);
+              const y = z * Math.sin(data.i * Math.PI / 180);
+              const zAdjusted = z * Math.cos(data.i * Math.PI / 180);
+              orbitPoints.push(new THREE.Vector3(x, y, zAdjusted));
+            }
+            // Línea de la órbita
+            const orbitGeometry = new THREE.BufferGeometry().setFromPoints(orbitPoints);
+            const orbitMaterial = new THREE.LineBasicMaterial({
+              color: data.color,
+              transparent: true,
+              opacity: 0.4
+            });
+            const orbitLine = new THREE.Line(orbitGeometry, orbitMaterial);
+            orbitGroup.add(orbitLine);
 
       // Asteroide: escala uniforme
-        let physicalRadiusKm = Math.max(data.size, MIN_ASTEROID_RADIUS_KM);
-        let radiusScene = physicalRadiusKm * ASTEROID_UNIFORM_SCALE;
-        if (radiusScene > MAX_SCENE_RADIUS) radiusScene = MAX_SCENE_RADIUS;
-        const asteroidGeometry = new THREE.SphereGeometry(radiusScene, 16, 16);
-              const asteroidMaterial = new THREE.MeshPhongMaterial({
-                color: data.color,
-                shininess: 5
-              });
-              const asteroid = new THREE.Mesh(asteroidGeometry, asteroidMaterial);
-              asteroid.userData = {
-                name: data.name,
-                type: 'asteroid',
-                orbit: data,
-                orbitPoints,
-                currentIndex: 0
-              };
-              asteroid.position.copy(orbitPoints[0]);
-              scene.add(asteroid);
-              asteroidMeshes.push(asteroid);
-      });
-    };
+      let physicalRadiusKm = Math.max(data.size, MIN_ASTEROID_RADIUS_KM);
+      let radiusScene = physicalRadiusKm * ASTEROID_UNIFORM_SCALE;
+      if (radiusScene > MAX_SCENE_RADIUS) radiusScene = MAX_SCENE_RADIUS;
+      const asteroidGeometry = new THREE.SphereGeometry(radiusScene, 16, 16);
+            const asteroidMaterial = new THREE.MeshPhongMaterial({
+              color: data.color,
+              shininess: 5
+            });
+            const asteroid = new THREE.Mesh(asteroidGeometry, asteroidMaterial);
+            asteroid.userData = {
+              name: data.name,
+              type: 'asteroid',
+              orbit: data,
+              orbitPoints,
+              currentIndex: 0
+            };
+            asteroid.position.copy(orbitPoints[0]);
+            scene.add(asteroid);
+            asteroidMeshesRef.current.push(asteroid);
+          });
+        };
 
   // Fetch de la API NASA NEO
       const controller = new AbortController();
@@ -404,7 +405,7 @@ const Asteroid3DViewer = () => {
       e.preventDefault();
       // Ajusta la distancia de la cámara con el scroll
   cameraDistance += e.deltaY * 0.1;
-  cameraDistance = Math.max(100, Math.min(1000, cameraDistance)); // Alejamiento de cámara
+  cameraDistance = Math.max(100, Math.min(2000, cameraDistance)); // Alejamiento de cámara
     };
 
     renderer.domElement.addEventListener('mousedown', onMouseDown);
