@@ -35,15 +35,16 @@ export default function DetalleMeteorito() {
   const cad0 = neo.close_approach_data?.[0];
 
   return (
-    <div className="max-w-3xl mx-auto px-4 py-6 text-left">
-      <Link
-        to="/listaMeteoritos"
-        className="mb-4 inline-block rounded-xl px-3 py-2 border border-white/20 hover:bg-white/10 transition"
-      >
-        ← Volver a la lista
-      </Link>
 
-      <h1 className="text-3xl font-semibold text-white">{neo.name}</h1>
+    <div className="flex w-full h-screen">
+      <div className="w-[10%] flex items-start justify-start m-4">
+        <Link to="/listaMeteoritos" className="mb-4 inline-block rounded-xl px-3 py-2 border border-white/20 hover:bg-white/10 transition" >
+          ←
+        </Link>
+      </div>
+      <div className="w-[90%] flex items-start justify-start">
+        <div>
+                <h1 className="text-3xl font-semibold text-white">{neo.name}</h1>
       <p className="text-white/70">ID: {neo.id}</p>
 
       <div className="mt-4 grid md:grid-cols-2 gap-4">
@@ -82,6 +83,10 @@ export default function DetalleMeteorito() {
           <p className="text-white/70 text-sm">No hay registros inmediatos en el feed consultado.</p>
         )}
       </div>
+
+        </div>
+      </div>
     </div>
+
   );
 }
