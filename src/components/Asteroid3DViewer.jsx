@@ -5,10 +5,13 @@ import * as THREE from 'three';
 
 const Asteroid3DViewer = () => {
   const mountRef = useRef(null);
+  const raycaster = new THREE.Raycaster();
+  const mouse = new THREE.Vector2();
 
   const cameraRef = useRef(null);
   const earthRef = useRef(null);
   const earthRotationRef = useRef(true);
+  const moonRotationRef = useRef(true);
   const cameraTransitionRef = useRef({ active: false,
   fromPos: new THREE.Vector3(),
   toPos: new THREE.Vector3(),
@@ -90,6 +93,19 @@ const Asteroid3DViewer = () => {
     threatAsteroidRef.current = null;
   }
 
+  const pauseContinue = () => {
+    // Alternar entre pausar y continuar la simulación
+    if (simulationModeRef.current === "orbit") {
+      simulationModeRef.current = "paused";
+      earthRotationRef.current = false;
+      moonRotationRef.current = false;
+    } else if (simulationModeRef.current === "paused") {
+      simulationModeRef.current = "orbit";
+      earthRotationRef.current = true;
+      moonRotationRef.current = true;
+    }
+  }
+
   useEffect(() => {
     const mount = mountRef.current;
     if (!mount) return;
@@ -102,7 +118,7 @@ const Asteroid3DViewer = () => {
     const ORBIT_SCALE = R_EARTH_SCENE * EARTH_ORBIT_IN_EARTH_RADII;
     // Escalado visual uniforme: un solo factor para todos los asteroides.
     const MIN_ASTEROID_RADIUS_KM = 0.05;      // radio mínimo físico usado antes de escalar
-    const ASTEROID_UNIFORM_SCALE = 200;       // factor multiplicativo único aumentado para mayor visibilidad
+    const ASTEROID_UNIFORM_SCALE = 100;       // factor multiplicativo único aumentado para mayor visibilidad
     const MAX_SCENE_RADIUS = R_EARTH_SCENE * 0.6; // límite máximo visual ligeramente ampliado
 
     cameraRef.current = new THREE.PerspectiveCamera(
@@ -408,10 +424,27 @@ const Asteroid3DViewer = () => {
   cameraDistance = Math.max(100, Math.min(2000, cameraDistance)); // Alejamiento de cámara
     };
 
+    // Evento de click para asteroides
+    const onClick = (event) => {
+      if (isDragging) return; // evitar click si se está arrastrando
+      const rect = renderer.domElement.getBoundingClientRect();
+      mouse.x = ((event.clientX - rect.left) / rect.width) * 2 - 1;
+      mouse.y = -((event.clientY - rect.top) / rect.height) * 2 + 1;
+      raycaster.setFromCamera(mouse, cameraRef.current);
+      const intersects = raycaster.intersectObjects(asteroidMeshesRef.current);
+      if (intersects.length > 0) {
+        const selectedAsteroid = intersects[0].object;
+        if(selectedAsteroid.userData && selectedAsteroid.userData.type === 'asteroid') {
+          // realizar acción.
+        } 
+      }
+    }
+
     renderer.domElement.addEventListener('mousedown', onMouseDown);
     renderer.domElement.addEventListener('mousemove', onMouseMove);
     renderer.domElement.addEventListener('mouseup', onMouseUp);
     renderer.domElement.addEventListener('wheel', onWheel);
+    renderer.domElement.addEventListener('click', onClick);
 
     // Animación
     let animationId;
@@ -421,15 +454,16 @@ const Asteroid3DViewer = () => {
         earthRef.current.rotation.y += 0.003;
       }
       
+
       // Órbita de la luna
-      moonOrbitPivot.rotation.y += moon_orbital_speed;
-      if (MOON_SYNC_ROTATION && moon) {
+      if (MOON_SYNC_ROTATION && moon && moonRotationRef.current) {
+        moonOrbitPivot.rotation.y += moon_orbital_speed;
         moon.rotation.y += moon_orbital_speed;
       }
 
       // Animar asteroides en sus órbitas
       asteroidMeshesRef.current.forEach(asteroid => {
-          if(!asteroid.userData.isImpacting) { // no se mueve el que va a impactar
+          if(!asteroid.userData.isImpacting && simulationModeRef.current==='orbit') { // no se mueve el que va a impactar
             const points = asteroid.userData.orbitPoints;
             if (points) {
               asteroid.userData.currentIndex = (asteroid.userData.currentIndex + 0.2) % points.length;
@@ -529,6 +563,7 @@ const Asteroid3DViewer = () => {
       renderer.domElement.removeEventListener('mousemove', onMouseMove);
       renderer.domElement.removeEventListener('mouseup', onMouseUp);
       renderer.domElement.removeEventListener('wheel', onWheel);
+      renderer.domElement.removeEventListener('click', onClick);
       renderer.dispose();
       if (renderer.domElement && mount.contains(renderer.domElement)) {
         mount.removeChild(renderer.domElement);
@@ -542,6 +577,8 @@ const Asteroid3DViewer = () => {
       <button onClick={() => onAsteroidClick(asteroidMeshesRef.current.find(a => a.userData.name === '(1999 GR6)'))}>Iniciar Simulación</button>
       <br/>
       <button onClick={reiniciar}>Reiniciar</button>
+      <br/>
+      <button onClick={pauseContinue}>Pausar</button>
     </div>
    <div
       ref={mountRef}
