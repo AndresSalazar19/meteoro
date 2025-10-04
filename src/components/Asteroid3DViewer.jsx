@@ -11,6 +11,9 @@ const Asteroid3DViewer = () => {
     if (!mount) return;
     // Escena, cámara y renderizador
   const scene = new THREE.Scene();
+  // Grupo que contendrá Tierra, atmósfera y la Luna (debe declararse antes de usarse)
+  const earthSystem = new THREE.Group();
+  scene.add(earthSystem);
   const R_EARTH_SCENE = 63.78;      
   const EARTH_ORBIT_IN_EARTH_RADII = 50; 
   const ORBIT_SCALE = R_EARTH_SCENE * EARTH_ORBIT_IN_EARTH_RADII;
@@ -26,7 +29,7 @@ const Asteroid3DViewer = () => {
       20000 // Aumentamos el plano lejano para abarcar órbitas escaladas
     );
     // Distancia inicial de la cámara: algo mayor que la órbita de la Tierra para verla completa
-    let cameraDistance = ORBIT_SCALE * 1.8; // ~ 1.8 UA
+    let cameraDistance = ORBIT_SCALE * 0.7; // ~ 1.8 UA
     camera.position.z = cameraDistance;
     const renderer = new THREE.WebGLRenderer({ antialias: true });
     renderer.setSize(mount.clientWidth, mount.clientHeight);
@@ -56,7 +59,7 @@ const Asteroid3DViewer = () => {
         earth.castShadow = true;
         earth.receiveShadow = true;
         earth.userData = { name: 'Earth', type: 'planet', radius: 6371 };
-        scene.add(earth);
+        earthSystem.add(earth);
       },
       undefined,
       (err) => {
@@ -70,7 +73,7 @@ const Asteroid3DViewer = () => {
         earth.castShadow = true;
         earth.receiveShadow = true;
         earth.userData = { name: 'Earth', type: 'planet', radius: 6371 };
-        scene.add(earth);
+        earthSystem.add(earth);
         console.error('No se pudo cargar la textura de la Tierra:', err);
       }
     );
@@ -85,11 +88,41 @@ const Asteroid3DViewer = () => {
       opacity: 0.15,
       side: THREE.BackSide
     });
-    const atmosphere = new THREE.Mesh(atmosphereGeometry, atmosphereMaterial);
-    scene.add(atmosphere);
+  const atmosphere = new THREE.Mesh(atmosphereGeometry, atmosphereMaterial);
+  earthSystem.add(atmosphere);
 
-    // Grupo para órbitas y arreglo para guardar meshes dinámicos
-    const orbitGroup = new THREE.Group();
+  // Grupo para órbitas y arreglo para guardar meshes dinámicos
+  const orbitGroup = new THREE.Group();
+    
+    const moonRadius = R_EARTH_SCENE * 0.27; 
+    const moonDistance = R_EARTH_SCENE * 10;
+    const moonInclination = 5.145;
+    const moon_orbital_speed = 0.01; 
+    const MOON_SYNC_ROTATION = true; 
+
+    const moonOrbitPivot = new THREE.Group();
+    moonOrbitPivot.rotation.x = THREE.MathUtils.degToRad(moonInclination);
+    earthSystem.add(moonOrbitPivot);
+
+  let moon = null;
+
+    // Añadir la luna
+
+    const moonGeometry = new THREE.SphereGeometry(moonRadius, 48, 48);
+    const moonTexture = textureLoader.load('/2k_moon.jpg');
+    const moonMaterial = new THREE.MeshPhongMaterial({
+      map: moonTexture,
+      shininess: 2,
+      specular: 0x222222
+    });
+    moon = new THREE.Mesh(moonGeometry, moonMaterial);
+    moon.castShadow = true;
+    moon.receiveShadow = true;
+    moon.userData = { name: 'Moon', type: 'moon', radius: 1737 };
+    // Posicionar la Luna a la distancia orbital sobre el eje X
+    moon.position.set(moonDistance, 0, 0);
+    moonOrbitPivot.add(moon);
+
     scene.add(orbitGroup);
     const asteroidMeshes = [];
 
@@ -277,6 +310,12 @@ const Asteroid3DViewer = () => {
         earth.rotation.y += 0.003;
       }
 
+      // Órbita de la luna
+      moonOrbitPivot.rotation.y += moon_orbital_speed;
+      if (MOON_SYNC_ROTATION && moon) {
+        moon.rotation.y += moon_orbital_speed;
+      }
+
       // Animar asteroides en sus órbitas
       asteroidMeshes.forEach(asteroid => {
         const points = asteroid.userData.orbitPoints;
@@ -311,6 +350,11 @@ const Asteroid3DViewer = () => {
       renderer.dispose();
       if (renderer.domElement && mount.contains(renderer.domElement)) {
         mount.removeChild(renderer.domElement);
+      }
+
+      if (moon) {
+        moon.geometry.dispose();
+        moon.material.dispose();
       }
     };
   }, []);
