@@ -126,6 +126,35 @@ const Asteroid3DViewer = () => {
     scene.add(orbitGroup);
     const asteroidMeshes = [];
 
+    // Añadir el sol -> Sigue una vista geocéntrica; la Tierra permanece en el origen
+
+    const SUN_TO_EARTH_RADIUS_RATIO = 110;          // ~109-110 (relación real)
+    const SUN_SIZE_COMPRESSION = 0.09;              // comprime para que no ocupe toda la escena
+    const SUN_RADIUS_SCENE = R_EARTH_SCENE * SUN_TO_EARTH_RADIUS_RATIO * SUN_SIZE_COMPRESSION;
+
+    const SUN_DISTANCE_SCENE = ORBIT_SCALE * 5;     // lo colocamos suficientemente lejos para dar luz
+    const SUN_POSITION = new THREE.Vector3(-SUN_DISTANCE_SCENE, 0, 0); // a la izquierda (eje -X)
+
+    const sunTexture = textureLoader.load('/8k_sun.jpg');
+    const sunMaterial = new THREE.MeshBasicMaterial({ map: sunTexture, color: 0xffffff });
+
+    const sunGeometry = new THREE.SphereGeometry(SUN_RADIUS_SCENE, 64, 64);
+    const sun = new THREE.Mesh(sunGeometry, sunMaterial);
+    sun.userData = { name: 'Sun', type: 'star', radiusKm: 695700 };
+    sun.position.copy(SUN_POSITION);
+    scene.add(sun);
+
+    // Luz puntual (opcional) para reforzar iluminación; puedes comentar si no la quieres
+    const sunLight = new THREE.PointLight(0xffffff, 2.2, ORBIT_SCALE * 10, 2);
+    sunLight.position.copy(SUN_POSITION);
+    scene.add(sunLight);
+
+    // Reorientar la luz direccional existente para que venga “desde” el Sol
+    directionalLight.position.copy(SUN_POSITION.clone().normalize().multiplyScalar(SUN_DISTANCE_SCENE));
+    directionalLight.target.position.set(0, 0, 0); // que apunte al centro (Tierra)
+    scene.add(directionalLight.target);
+
+
   // Escalado lineal ya definido arriba: semi_major_axis (AU) * ORBIT_SCALE
 
     const randomColor = () => Math.floor(Math.random() * 0xffffff);
