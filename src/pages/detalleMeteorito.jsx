@@ -117,8 +117,5 @@ export default function DetalleMeteorito() {
       </div>
 
         </div>
-      </div>
-    </div>
-
   );
 }
