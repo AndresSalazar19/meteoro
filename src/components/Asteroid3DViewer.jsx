@@ -3,12 +3,11 @@
 import React, { useEffect, useRef, useState, useCallback } from 'react';
 import * as THREE from 'three';
 
-// Constantes para los cálculos (fuera del componente para evitar re-creación)
+// Constantes y funciones helper (fuera del componente para evitar re-creación)
 const DEFAULT_DENSITY = 2500; // kg/m^3
 const J_PER_MT = 4.184e15;    // joules por megatón TNT
 const ORBIT_SCALE = 100;      // Ajusta este número para separar más / menos las órbitas
 
-// Helper functions (fuera del componente para evitar re-creación)
 const estimateDiameterFromH = (H, albedo = 0.14) => {
   if (typeof H !== 'number' || isNaN(H)) return null;
   return (1329 / Math.sqrt(albedo)) * Math.pow(10, -H / 5);
@@ -62,6 +61,8 @@ const tierFromEnergyMt = (E) => {
 
 const randomColor = () => Math.floor(Math.random() * 0xffffff);
 
+
+// --- Componente principal ---
 const Asteroid3DViewer = () => {
   const mountRef = useRef(null);
 
@@ -71,29 +72,31 @@ const Asteroid3DViewer = () => {
   const rendererRef = useRef(null);
   const earthRef = useRef(null);
   const orbitGroupRef = useRef(null);
-  const asteroidMeshesRef = useRef([]); // Array para almacenar los meshes de asteroides actuales
+  const asteroidMeshesRef = useRef([]);
   const animationIdRef = useRef(null);
   const cameraDistanceRef = useRef(100);
   const cameraRotationRef = useRef({ theta: Math.PI / 4, phi: Math.PI / 6 });
 
-  // Estados para los datos de asteroides y el filtro
+  // Estados para la lógica de la aplicación
   const [apiAsteroids, setApiAsteroids] = useState([]);
   const [manualAsteroids, setManualAsteroids] = useState([]);
   const [filterTerm, setFilterTerm] = useState('');
   const [viewMode, setViewMode] = useState('api'); // 'api', 'manual', 'all'
-  const [hasAddedFirstManualAsteroid, setHasAddedFirstManualAsteroid] = useState(false); // Nuevo estado
+  const [viewState, setViewState] = useState('inputForm'); // 'inputForm' o 'simulation'
+  const [lastSimulatedAsteroid, setLastSimulatedAsteroid] = useState(null);
 
   // Estados para los campos del formulario de entrada
   const [newAsteroidName, setNewAsteroidName] = useState('');
-  const [newAsteroidA, setNewAsteroidA] = useState('1.5'); // semi_major_axis (AU)
-  const [newAsteroidE, setNewAsteroidE] = useState('0.1'); // eccentricity
-  const [newAsteroidI, setNewAsteroidI] = useState('10'); // inclination (degrees)
-  const [newAsteroidDiamMin, setNewAsteroidDiamMin] = useState('0.1'); // estimated_diameter_min (km)
-  const [newAsteroidDiamMax, setNewAsteroidDiamMax] = useState('0.2'); // estimated_diameter_max (km)
-  const [newAsteroidH, setNewAsteroidH] = useState('20'); // absolute_magnitude_h
-  const [newAsteroidVelocity, setNewAsteroidVelocity] = useState('15'); // velocityKms (km/s)
+  const [newAsteroidA, setNewAsteroidA] = useState('1.5');
+  const [newAsteroidE, setNewAsteroidE] = useState('0.1');
+  const [newAsteroidI, setNewAsteroidI] = useState('10');
+  const [newAsteroidDiamMin, setNewAsteroidDiamMin] = useState('0.1');
+  const [newAsteroidDiamMax, setNewAsteroidDiamMax] = useState('0.2');
+  const [newAsteroidH, setNewAsteroidH] = useState('20');
+  const [newAsteroidVelocity, setNewAsteroidVelocity] = useState('15');
 
-  // Función para agregar asteroides a la escena (limpia y vuelve a dibujar)
+
+  // Función para agregar/actualizar asteroides en la escena Three.js
   const updateAsteroidsInScene = useCallback((dataList) => {
     const scene = sceneRef.current;
     const orbitGroup = orbitGroupRef.current;
@@ -113,7 +116,7 @@ const Asteroid3DViewer = () => {
         child.material.dispose();
       }
     });
-    orbitGroup.clear(); // Limpiar todas las líneas de órbita
+    orbitGroup.clear();
     asteroidMeshes.length = 0; // Vaciar el array de meshes
 
     dataList.forEach((data) => {
@@ -125,7 +128,6 @@ const Asteroid3DViewer = () => {
         const r = (scaledA * (1 - data.e * data.e)) / (1 + data.e * Math.cos(theta));
         const x = r * Math.cos(theta);
         const z = r * Math.sin(theta);
-        // Ajuste para la inclinación de la órbita en el plano YZ
         const y = z * Math.sin(data.i * Math.PI / 180);
         const zAdjusted = z * Math.cos(data.i * Math.PI / 180);
         orbitPoints.push(new THREE.Vector3(x, y, zAdjusted));
@@ -159,20 +161,11 @@ const Asteroid3DViewer = () => {
         diameterKm: data.diameterKm ?? null
       };
 
-      if (data.energyMt != null) {
-        console.log(
-          `[SEVERITY] ${data.name} | E≈${data.energyMt.toFixed(2)} Mt | v≈${(data.velocityKms ?? 0).toFixed(2)} km/s | D≈${(data.diameterKm ?? 0).toFixed(3)} km | ${data.severity}`
-        );
-      } else {
-        console.log(`[ASTEROID] ${data.name} | No hay datos de energía para calcular severidad.`);
-      }
-
       asteroid.position.copy(orbitPoints[0]);
       scene.add(asteroid);
       asteroidMeshes.push(asteroid);
     });
   }, []);
-
 
   // --- useEffect para inicialización de Three.js y carga de API (se ejecuta una vez) ---
   useEffect(() => {
@@ -197,21 +190,20 @@ const Asteroid3DViewer = () => {
     renderer.setSize(mount.clientWidth, mount.clientHeight);
     mount.appendChild(renderer.domElement);
 
-    // Luz direccional y ambiental
+    // Luces
     const ambientLight = new THREE.AmbientLight(0xffffff, 0.5);
     scene.add(ambientLight);
     const directionalLight = new THREE.DirectionalLight(0xffffff, 1);
     directionalLight.position.set(10, 10, 10);
     scene.add(directionalLight);
 
-    // Earth con textura realista
+    // Tierra con textura
     const earthGeometry = new THREE.SphereGeometry(6.371, 64, 64);
     const textureLoader = new THREE.TextureLoader();
-    let earthMaterial;
     textureLoader.load(
       '/earthmap.jpg',
       (texture) => {
-        earthMaterial = new THREE.MeshPhongMaterial({
+        const earthMaterial = new THREE.MeshPhongMaterial({
           map: texture,
           shininess: 25,
           specular: 0x333333
@@ -224,7 +216,7 @@ const Asteroid3DViewer = () => {
       },
       undefined,
       (err) => {
-        earthMaterial = new THREE.MeshPhongMaterial({
+        const earthMaterial = new THREE.MeshPhongMaterial({
           color: 0x2233ff,
           shininess: 25,
           specular: 0x333333
@@ -238,7 +230,7 @@ const Asteroid3DViewer = () => {
       }
     );
 
-    // Atmosfera de la Tierra
+    // Atmósfera de la Tierra
     const atmosphereGeometry = new THREE.SphereGeometry(6.8, 64, 64);
     const atmosphereMaterial = new THREE.MeshBasicMaterial({
       color: 0x4488ff,
@@ -335,11 +327,11 @@ const Asteroid3DViewer = () => {
             };
             detailed.push(parsed);
           } catch (err) {
-            // console.error('Error NEO individual', err);
+            // Ignora errores individuales
           }
         }
         if (detailed.length) {
-          setApiAsteroids(detailed); // Actualizar el estado con los asteroides de la API
+          setApiAsteroids(detailed);
         }
       } catch (e) {
         if (e.name !== 'AbortError') {
@@ -350,7 +342,7 @@ const Asteroid3DViewer = () => {
 
     fetchAsteroids();
 
-    // Mouse controls
+    // Controles de ratón
     let isDragging = false;
     let previousMousePosition = { x: 0, y: 0 };
 
@@ -426,7 +418,6 @@ const Asteroid3DViewer = () => {
           mount.removeChild(rendererRef.current.domElement);
         }
       }
-      // Limpiar geometrías y materiales de la escena (opcional, para una limpieza más profunda)
       scene.traverse((object) => {
         if (object.isMesh) {
           object.geometry.dispose();
@@ -439,26 +430,49 @@ const Asteroid3DViewer = () => {
   // --- useEffect para actualizar la visualización de asteroides (se ejecuta al cambiar datos/filtro/viewMode) ---
   useEffect(() => {
     let asteroidsToDisplay = [];
+    let currentAsteroidSet = [];
 
-    if (viewMode === 'api') {
-      asteroidsToDisplay = apiAsteroids;
-    } else if (viewMode === 'manual') {
-      asteroidsToDisplay = manualAsteroids;
-    } else if (viewMode === 'all') {
-      asteroidsToDisplay = [...apiAsteroids, ...manualAsteroids];
+    // Prioriza el asteroide simulado si estamos en la vista de simulación
+    if (viewState === 'simulation' && lastSimulatedAsteroid) {
+        // En modo simulación, el asteroide simulado es el foco principal.
+        // Si el viewMode es 'manual' (el comportamiento por defecto al simular),
+        // o si el filtro coincide con su nombre, se asegura de que sea el único en 'currentAsteroidSet'.
+        // Esto permite al usuario cambiar el viewMode *mientras ve la simulación*
+        // para, por ejemplo, ver todos los asteroides de la API.
+        if (viewMode === 'manual' || filterTerm.toLowerCase() === lastSimulatedAsteroid.name.toLowerCase()) {
+            currentAsteroidSet = [lastSimulatedAsteroid];
+        } else {
+            // Si el viewMode ha cambiado a 'api' o 'all', usa esos sets
+            if (viewMode === 'api') {
+                currentAsteroidSet = apiAsteroids;
+            } else if (viewMode === 'all') {
+                currentAsteroidSet = [...apiAsteroids, ...manualAsteroids];
+            }
+            // Si viewMode es 'manual' pero el filtro no coincide con el simulado, currentAsteroidSet estará vacío, lo cual es correcto.
+        }
+    } else {
+        // Si no estamos en la vista de simulación, o si no hay un asteroide simulado,
+        // nos basamos completamente en el viewMode seleccionado.
+        if (viewMode === 'api') {
+            currentAsteroidSet = apiAsteroids;
+        } else if (viewMode === 'manual') {
+            currentAsteroidSet = manualAsteroids;
+        } else if (viewMode === 'all') {
+            currentAsteroidSet = [...apiAsteroids, ...manualAsteroids];
+        }
     }
 
     // Aplicar filtro al conjunto de asteroides seleccionado
-    const filteredAsteroids = asteroidsToDisplay.filter(asteroid =>
+    asteroidsToDisplay = currentAsteroidSet.filter(asteroid =>
       asteroid.name.toLowerCase().includes(filterTerm.toLowerCase())
     );
 
-    updateAsteroidsInScene(filteredAsteroids);
+    updateAsteroidsInScene(asteroidsToDisplay);
 
-  }, [apiAsteroids, manualAsteroids, filterTerm, viewMode, updateAsteroidsInScene]); // Dependencias: re-ejecutar cuando cambien los asteroides, el filtro o el modo de vista
+  }, [apiAsteroids, manualAsteroids, filterTerm, viewMode, viewState, lastSimulatedAsteroid, updateAsteroidsInScene]);
 
-  // --- HANDLER PARA AGREGAR ASTEROIDE MANUALMENTE ---
-  const handleAddAsteroid = useCallback(() => {
+  // --- HANDLER PARA EL BOTÓN "SIMULAR" ---
+  const handleSimulate = useCallback(() => {
     const vKms = parseFloat(newAsteroidVelocity);
     const diamMinKm = parseFloat(newAsteroidDiamMin);
     const diamMaxKm = parseFloat(newAsteroidDiamMax);
@@ -493,12 +507,10 @@ const Asteroid3DViewer = () => {
     };
 
     setManualAsteroids((prevAsteroids) => [...prevAsteroids, newAsteroid]);
-
-    // Si es el primer asteroide manual añadido, cambiamos el modo de vista
-    if (!hasAddedFirstManualAsteroid) {
-      setViewMode('manual');
-      setHasAddedFirstManualAsteroid(true);
-    }
+    setLastSimulatedAsteroid(newAsteroid); // Guardar el asteroide para la vista de simulación
+    setFilterTerm(newAsteroid.name);       // Filtrar por el nombre del nuevo asteroide
+    setViewMode('manual');                 // Asegurar que el modo manual esté activo
+    setViewState('simulation');            // Cambiar a la vista de simulación
 
     // Limpiar formulario después de agregar
     setNewAsteroidName('');
@@ -509,14 +521,170 @@ const Asteroid3DViewer = () => {
     setNewAsteroidDiamMax('0.2');
     setNewAsteroidH('20');
     setNewAsteroidVelocity('15');
-  }, [newAsteroidName, newAsteroidA, newAsteroidE, newAsteroidI, newAsteroidDiamMin, newAsteroidDiamMax, newAsteroidH, newAsteroidVelocity, hasAddedFirstManualAsteroid]);
+  }, [newAsteroidName, newAsteroidA, newAsteroidE, newAsteroidI, newAsteroidDiamMin, newAsteroidDiamMax, newAsteroidH, newAsteroidVelocity]);
 
+  // --- HANDLER PARA VOLVER AL FORMULARIO ---
+  const handleGoBack = useCallback(() => {
+    setViewState('inputForm');
+    setFilterTerm(''); // Limpiar el filtro
+    setViewMode('api'); // Volver a mostrar los asteroides de la API por defecto
+    setLastSimulatedAsteroid(null); // Limpiar el asteroide simulado
+  }, []);
+
+
+  // --- Función para mapear severidad a valores de escala de Turín y probabilidad ---
+  const getImpactDetails = (severity) => {
+    switch (severity) {
+      case 'LOW':
+        return { prob: '1%', turin: '0', riesgo: 'Bajo', accion: 'Seguro' };
+      case 'MEDIUM':
+        return { prob: '55%', turin: '5', riesgo: 'Medio', accion: 'Peligro. Correr.' };
+      case 'HIGH':
+        return { prob: '90%', turin: '8', riesgo: 'Alto', accion: 'Impacto Inminente!' };
+      default:
+        return { prob: 'N/A', turin: 'N/A', riesgo: 'Desconocido', accion: 'Información no disponible' };
+    }
+  };
+
+  const impactDetails = lastSimulatedAsteroid ? getImpactDetails(lastSimulatedAsteroid.severity) : getImpactDetails(null);
+
+  // Calcular contadores para el panel lateral
+  const totalAsteroidsCount = apiAsteroids.length + manualAsteroids.length;
+  const filteredAsteroidsCount = (() => {
+    let asteroidsToCount = [];
+    if (viewMode === 'api') {
+      asteroidsToCount = apiAsteroids;
+    } else if (viewMode === 'manual') {
+      asteroidsToCount = manualAsteroids;
+    } else if (viewMode === 'all') {
+      asteroidsToCount = [...apiAsteroids, ...manualAsteroids];
+    }
+    // Asegurarse de que el asteroide simulado se cuenta si es el único en la escena en modo simulación
+    if (viewState === 'simulation' && lastSimulatedAsteroid && viewMode === 'manual') {
+        asteroidsToCount = [lastSimulatedAsteroid];
+    }
+    return asteroidsToCount.filter(a => a.name.toLowerCase().includes(filterTerm.toLowerCase())).length;
+  })();
 
   return (
     <div
       ref={mountRef}
-      style={{ width: '100vw', height: '100vh', overflow: 'hidden', position: 'relative' }}
+      style={{
+        width: '100vw',
+        height: '100vh',
+        overflow: 'hidden',
+        position: 'relative',
+        backgroundColor: 'black', // Fondo negro global
+        color: 'white',
+        fontFamily: 'Arial, sans-serif'
+      }}
     >
+      {/* Three.js Canvas se renderiza aquí por debajo de los overlays */}
+
+      {viewState === 'inputForm' && (
+        <div style={{
+          position: 'absolute',
+          top: '0',
+          left: '0',
+          width: '100%',
+          height: '100%',
+          display: 'flex',
+          flexDirection: 'column',
+          alignItems: 'center',
+          justifyContent: 'center',
+          backgroundColor: 'rgba(0,0,0,0.9)', // Fondo más oscuro para el formulario
+          zIndex: 20, // Asegura que esté por encima del canvas
+          overflowY: 'auto', // Para permitir scroll si el contenido es grande
+          padding: '20px'
+        }}>
+          <h1 style={{ fontSize: '3em', marginBottom: '10px', color: 'white', letterSpacing: '2px' }}>WHAT IF ?</h1>
+          <p style={{ fontSize: '1.2em', marginBottom: '5px', color: '#ccc' }}>Simula escenarios en segundos</p>
+          <p style={{ fontSize: '1.2em', marginBottom: '30px', color: '#ccc' }}>Cambia las variables y mira el impacto en tiempo real.</p>
+
+          <div style={{
+            display: 'grid',
+            gridTemplateColumns: 'repeat(2, 1fr)', // Dos columnas
+            gap: '20px 40px', // Espacio entre filas y columnas
+            marginBottom: '40px',
+            width: '80%', // Ajustar ancho del contenedor de variables
+            maxWidth: '800px'
+          }}>
+            {/* Campos de entrada */}
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+              <label style={{ fontSize: '1.1em', minWidth: '120px' }}>Variable 1:</label>
+              <input type="text" value={newAsteroidName} onChange={(e) => setNewAsteroidName(e.target.value)}
+                placeholder="Nombre"
+                style={{
+                  width: 'calc(100% - 130px)', padding: '8px', border: '1px solid #555',
+                  borderRadius: '5px', background: '#333', color: 'white', fontSize: '1em'
+                }} />
+            </div>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+              <label style={{ fontSize: '1.1em', minWidth: '120px' }}>Variable 2:</label>
+              <input type="number" step="0.1" value={newAsteroidA} onChange={(e) => setNewAsteroidA(e.target.value)}
+                placeholder="1.5"
+                style={{
+                  width: 'calc(100% - 130px)', padding: '8px', border: '1px solid #555',
+                  borderRadius: '5px', background: '#333', color: 'white', fontSize: '1em'
+                }} />
+            </div>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+              <label style={{ fontSize: '1.1em', minWidth: '120px' }}>Variable 3:</label>
+              <input type="number" step="0.01" value={newAsteroidE} onChange={(e) => setNewAsteroidE(e.target.value)}
+                placeholder="0.1"
+                style={{
+                  width: 'calc(100% - 130px)', padding: '8px', border: '1px solid #555',
+                  borderRadius: '5px', background: '#333', color: 'white', fontSize: '1em'
+                }} />
+            </div>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+              <label style={{ fontSize: '1.1em', minWidth: '120px' }}>Variable 4:</label>
+              <input type="number" step="1" value={newAsteroidI} onChange={(e) => setNewAsteroidI(e.target.value)}
+                placeholder="10"
+                style={{
+                  width: 'calc(100% - 130px)', padding: '8px', border: '1px solid #555',
+                  borderRadius: '5px', background: '#333', color: 'white', fontSize: '1em'
+                }} />
+            </div>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+              <label style={{ fontSize: '1.1em', minWidth: '120px' }}>Variable 5:</label>
+              <input type="number" step="0.01" value={newAsteroidDiamMin} onChange={(e) => setNewAsteroidDiamMin(e.target.value)}
+                placeholder="0.1"
+                style={{
+                  width: 'calc(100% - 130px)', padding: '8px', border: '1px solid #555',
+                  borderRadius: '5px', background: '#333', color: 'white', fontSize: '1em'
+                }} />
+            </div>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+              <label style={{ fontSize: '1.1em', minWidth: '120px' }}>Variable 6:</label>
+              <input type="number" step="0.1" value={newAsteroidVelocity} onChange={(e) => setNewAsteroidVelocity(e.target.value)}
+                placeholder="15"
+                style={{
+                  width: 'calc(100% - 130px)', padding: '8px', border: '1px solid #555',
+                  borderRadius: '5px', background: '#333', color: 'white', fontSize: '1em'
+                }} />
+            </div>
+          </div>
+
+          <button onClick={handleSimulate} style={{
+            backgroundColor: '#FF0000',
+            color: 'white',
+            padding: '15px 40px',
+            border: 'none',
+            borderRadius: '8px',
+            cursor: 'pointer',
+            fontSize: '1.5em',
+            fontWeight: 'bold',
+            boxShadow: '0 0 15px rgba(255,0,0,0.6)',
+            transition: 'background-color 0.3s, box-shadow 0.3s',
+            marginBottom: '40px'
+          }}>
+            SIMULAR
+          </button>
+        </div>
+      )}
+
+      {/* Este div contendrá los controles de visualización y filtro, siempre visibles */}
       <div style={{
         position: 'absolute',
         top: '10px',
@@ -527,124 +695,197 @@ const Asteroid3DViewer = () => {
         borderRadius: '8px',
         maxHeight: 'calc(100vh - 40px)',
         overflowY: 'auto',
-        fontFamily: 'monospace',
+        fontFamily: 'Arial, sans-serif',
         zIndex: 10,
-        boxShadow: '0 4px 8px rgba(0,0,0,0.3)'
+        boxShadow: '0 4px 8px rgba(0,0,0,0.3)',
       }}>
-        <h3>Añadir Asteroide Manualmente</h3>
-        <div style={{ marginBottom: '8px' }}>
-          <label style={{ display: 'block', marginBottom: '3px' }}>Nombre:</label>
-          <input type="text" value={newAsteroidName} onChange={(e) => setNewAsteroidName(e.target.value)} style={{ width: 'calc(100% - 10px)', padding: '5px', border: '1px solid #555', borderRadius: '3px', background: '#333', color: 'white' }} />
-        </div>
-        <div style={{ marginBottom: '8px' }}>
-          <label style={{ display: 'block', marginBottom: '3px' }}>Semieje Mayor (AU):</label>
-          <input type="number" step="0.1" value={newAsteroidA} onChange={(e) => setNewAsteroidA(e.target.value)} style={{ width: 'calc(100% - 10px)', padding: '5px', border: '1px solid #555', borderRadius: '3px', background: '#333', color: 'white' }} />
-        </div>
-        <div style={{ marginBottom: '8px' }}>
-          <label style={{ display: 'block', marginBottom: '3px' }}>Excentricidad:</label>
-          <input type="number" step="0.01" value={newAsteroidE} onChange={(e) => setNewAsteroidE(e.target.value)} style={{ width: 'calc(100% - 10px)', padding: '5px', border: '1px solid #555', borderRadius: '3px', background: '#333', color: 'white' }} />
-        </div>
-        <div style={{ marginBottom: '8px' }}>
-          <label style={{ display: 'block', marginBottom: '3px' }}>Inclinación (deg):</label>
-          <input type="number" step="1" value={newAsteroidI} onChange={(e) => setNewAsteroidI(e.target.value)} style={{ width: 'calc(100% - 10px)', padding: '5px', border: '1px solid #555', borderRadius: '3px', background: '#333', color: 'white' }} />
-        </div>
-        <div style={{ marginBottom: '8px' }}>
-          <label style={{ display: 'block', marginBottom: '3px' }}>Diámetro Mín (km):</label>
-          <input type="number" step="0.01" value={newAsteroidDiamMin} onChange={(e) => setNewAsteroidDiamMin(e.target.value)} style={{ width: 'calc(100% - 10px)', padding: '5px', border: '1px solid #555', borderRadius: '3px', background: '#333', color: 'white' }} />
-        </div>
-        <div style={{ marginBottom: '8px' }}>
-          <label style={{ display: 'block', marginBottom: '3px' }}>Diámetro Máx (km):</label>
-          <input type="number" step="0.01" value={newAsteroidDiamMax} onChange={(e) => setNewAsteroidDiamMax(e.target.value)} style={{ width: 'calc(100% - 10px)', padding: '5px', border: '1px solid #555', borderRadius: '3px', background: '#333', color: 'white' }} />
-        </div>
-        <div style={{ marginBottom: '8px' }}>
-          <label style={{ display: 'block', marginBottom: '3px' }}>Magnitud Absoluta (H):</label>
-          <input type="number" step="0.1" value={newAsteroidH} onChange={(e) => setNewAsteroidH(e.target.value)} style={{ width: 'calc(100% - 10px)', padding: '5px', border: '1px solid #555', borderRadius: '3px', background: '#333', color: 'white' }} />
-        </div>
-        <div style={{ marginBottom: '15px' }}>
-          <label style={{ display: 'block', marginBottom: '3px' }}>Velocidad (km/s):</label>
-          <input type="number" step="0.1" value={newAsteroidVelocity} onChange={(e) => setNewAsteroidVelocity(e.target.value)} style={{ width: 'calc(100% - 10px)', padding: '5px', border: '1px solid #555', borderRadius: '3px', background: '#333', color: 'white' }} />
-        </div>
-        <button onClick={handleAddAsteroid} style={{
-          backgroundColor: '#4CAF50',
-          color: 'white',
-          padding: '10px 15px',
-          border: 'none',
-          borderRadius: '5px',
-          cursor: 'pointer',
-          width: '100%'
-        }}>Añadir Asteroide</button>
+        {viewState === 'simulation' && (
+             <button onClick={handleGoBack} style={{
+                backgroundColor: 'transparent',
+                border: 'none',
+                color: 'white',
+                fontSize: '2em',
+                cursor: 'pointer',
+                padding: '5px 10px',
+                marginBottom: '10px',
+                display: 'block',
+                width: 'fit-content'
+             }}>
+             &#8592; {/* Flecha hacia la izquierda */}
+           </button>
+        )}
 
-        <h3 style={{ marginTop: '25px', borderTop: '1px solid #555', paddingTop: '15px' }}>Opciones de Visualización</h3>
-        <div style={{ marginBottom: '10px' }}>
+        <h3 style={{ margin: '0 0 15px 0', fontSize: '1.1em' }}>Opciones de Visualización</h3>
+        <div style={{ display: 'flex', gap: '10px', marginBottom: '20px' }}>
           <button
-            onClick={() => setViewMode('api')}
+            onClick={() => { setViewMode('api'); setFilterTerm(''); }}
             style={{
               backgroundColor: viewMode === 'api' ? '#007bff' : '#555',
-              color: 'white',
-              padding: '8px 12px',
-              border: 'none',
-              borderRadius: '3px',
-              cursor: 'pointer',
-              marginRight: '5px'
+              color: 'white', padding: '10px 15px', border: 'none',
+              borderRadius: '5px', cursor: 'pointer', fontSize: '0.9em',
+              fontWeight: 'bold'
             }}
           >
             Ver Asteroides API
           </button>
           <button
-            onClick={() => setViewMode('manual')}
+            onClick={() => { setViewMode('manual'); setFilterTerm(''); }}
             style={{
               backgroundColor: viewMode === 'manual' ? '#007bff' : '#555',
-              color: 'white',
-              padding: '8px 12px',
-              border: 'none',
-              borderRadius: '3px',
-              cursor: 'pointer',
-              marginRight: '5px'
+              color: 'white', padding: '10px 15px', border: 'none',
+              borderRadius: '5px', cursor: 'pointer', fontSize: '0.9em',
+              fontWeight: 'bold'
             }}
           >
             Ver Asteroides Manuales
           </button>
           <button
-            onClick={() => setViewMode('all')}
+            onClick={() => { setViewMode('all'); setFilterTerm(''); }}
             style={{
               backgroundColor: viewMode === 'all' ? '#007bff' : '#555',
-              color: 'white',
-              padding: '8px 12px',
-              border: 'none',
-              borderRadius: '3px',
-              cursor: 'pointer',
+              color: 'white', padding: '10px 15px', border: 'none',
+              borderRadius: '5px', cursor: 'pointer', fontSize: '0.9em',
+              fontWeight: 'bold'
             }}
           >
             Ver Todos
           </button>
         </div>
 
-
-        <h3 style={{ marginTop: '25px', borderTop: '1px solid #555', paddingTop: '15px' }}>Filtrar Asteroides</h3>
+        <h3 style={{ margin: '0 0 15px 0', fontSize: '1.1em' }}>Filtrar Asteroides</h3>
         <input
           type="text"
           placeholder="Filtrar por nombre..."
           value={filterTerm}
           onChange={(e) => setFilterTerm(e.target.value)}
-          style={{ width: 'calc(100% - 10px)', padding: '8px', boxSizing: 'border-box', border: '1px solid #555', borderRadius: '3px', background: '#333', color: 'white' }}
+          style={{
+            width: 'calc(100% - 20px)', padding: '10px', boxSizing: 'border-box',
+            border: '1px solid #555', borderRadius: '5px', background: '#333', color: 'white',
+            fontSize: '0.9em', marginBottom: '10px'
+          }}
         />
-        <p style={{ marginTop: '15px', fontSize: '0.9em' }}>Total de asteroides (API + Manuales): {apiAsteroids.length + manualAsteroids.length}</p>
-        <p style={{ fontSize: '0.9em' }}>Asteroides filtrados en escena: {
-          (() => {
-            let asteroidsCount = [];
-            if (viewMode === 'api') {
-              asteroidsCount = apiAsteroids;
-            } else if (viewMode === 'manual') {
-              asteroidsCount = manualAsteroids;
-            } else if (viewMode === 'all') {
-              asteroidsCount = [...apiAsteroids, ...manualAsteroids];
-            }
-            return asteroidsCount.filter(a => a.name.toLowerCase().includes(filterTerm.toLowerCase())).length;
-          })()
-        }</p>
+        <p style={{ marginTop: '15px', fontSize: '0.9em' }}>Total de asteroides (API + Manuales): {totalAsteroidsCount}</p>
+        <p style={{ fontSize: '0.9em' }}>Asteroides filtrados en escena: {filteredAsteroidsCount}</p>
       </div>
+
+      {viewState === 'simulation' && (
+        <>
+          {/* Panel Superior de SIMULACIÓN (título) */}
+          <div style={{
+            position: 'absolute',
+            top: '0',
+            left: '0',
+            width: '100%',
+            height: '60px',
+            background: 'rgba(0,0,0,0.8)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center', // Centrar título
+            padding: '0 20px',
+            zIndex: 15
+          }}>
+            <h1 style={{ fontSize: '2em', color: 'white', margin: '0', letterSpacing: '2px' }}>SIMULACIÓN</h1>
+          </div>
+
+          {/* Panel Derecho de Variables */}
+          <div style={{
+            position: 'absolute',
+            top: '80px', // Debajo del panel superior
+            right: '20px',
+            background: 'rgba(0,0,0,0.6)',
+            color: 'white',
+            padding: '15px',
+            borderRadius: '8px',
+            width: '250px',
+            zIndex: 10,
+            boxShadow: '0 4px 8px rgba(0,0,0,0.3)',
+            fontSize: '1em'
+          }}>
+            <h3 style={{ margin: '0 0 15px 0', borderBottom: '1px solid #555', paddingBottom: '10px' }}>Variables del Asteroide</h3>
+            {lastSimulatedAsteroid && (
+              <>
+                <p style={{ margin: '5px 0' }}>Variable 1: {lastSimulatedAsteroid.name}</p>
+                <p style={{ margin: '5px 0' }}>Variable 2: {lastSimulatedAsteroid.a.toFixed(2)} AU</p>
+                <p style={{ margin: '5px 0' }}>Variable 3: {lastSimulatedAsteroid.e.toFixed(2)}</p>
+                <p style={{ margin: '5px 0' }}>Variable 4: {lastSimulatedAsteroid.i.toFixed(2)} deg</p>
+                <p style={{ margin: '5px 0' }}>Variable 5: {lastSimulatedAsteroid.diameterKm ? lastSimulatedAsteroid.diameterKm.toFixed(3) + ' km' : 'N/A'}</p>
+                <p style={{ margin: '5px 0' }}>Variable 6: {lastSimulatedAsteroid.velocityKms ? lastSimulatedAsteroid.velocityKms.toFixed(2) + ' km/s' : 'N/A'}</p>
+              </>
+            )}
+            {!lastSimulatedAsteroid && <p>No hay asteroide simulado.</p>}
+          </div>
+
+          {/* Paneles Inferiores */}
+          <div style={{
+            position: 'absolute',
+            bottom: '20px',
+            left: '20px',
+            right: '20px',
+            display: 'flex',
+            justifyContent: 'space-between',
+            gap: '20px',
+            zIndex: 10,
+            pointerEvents: 'none' // Para que los eventos del ratón pasen al canvas 3D
+          }}>
+            {/* Panel Inferior Izquierdo: Probabilidad, Escala de Turín, Riesgo */}
+            <div style={{
+              flex: 1,
+              maxWidth: '300px', // Limitar el ancho
+              background: '#3A3F47',
+              color: 'white',
+              padding: '10px 15px', // Reducir padding
+              borderRadius: '8px',
+              boxShadow: '0 4px 8px rgba(0,0,0,0.3)',
+              display: 'flex',
+              flexDirection: 'column',
+              justifyContent: 'space-between',
+              alignItems: 'flex-start',
+              fontSize: '0.9em', // Reducir tamaño de fuente
+              pointerEvents: 'auto' // Permitir eventos de ratón en el panel
+            }}>
+              <p style={{ margin: '3px 0' }}>Prob. de impacto: {impactDetails.prob}</p>
+              <p style={{ margin: '3px 0' }}>Escala de Turín: {impactDetails.turin}</p>
+              <p style={{ margin: '3px 0' }}>Riesgo: {impactDetails.riesgo}</p>
+              {/* Placeholder para el medidor de riesgo (gauge) */}
+              <div style={{
+                width: '80px', height: '40px', // Reducir tamaño del gauge
+                border: '1px solid white',
+                display: 'flex', alignItems: 'center', justifyContent: 'center',
+                marginTop: '8px', fontSize: '0.7em',
+                background: `conic-gradient(#4CAF50 ${parseInt(impactDetails.turin) * 10}%, #FFC107 ${parseInt(impactDetails.turin) * 10}% ${parseInt(impactDetails.turin) * 20}%, #FF0000 ${parseInt(impactDetails.turin) * 20}%)`
+              }}>
+                {/* Puedes usar una imagen o un componente real de gauge aquí */}
+                {impactDetails.riesgo === 'Bajo' && '🟢'}
+                {impactDetails.riesgo === 'Medio' && '🟠'}
+                {impactDetails.riesgo === 'Alto' && '🔴'}
+              </div>
+            </div>
+
+            {/* Panel Inferior Derecho: Impacto Peligro Correr */}
+            <div style={{
+              flex: 1,
+              maxWidth: '300px', // Limitar el ancho, similar al otro panel
+              background: '#2C2F3A',
+              color: 'white',
+              padding: '10px 15px', // Reducir padding
+              borderRadius: '8px',
+              boxShadow: '0 4px 8px rgba(0,0,0,0.3)',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              fontSize: '1.2em', // Reducir tamaño de fuente
+              fontWeight: 'bold',
+              textAlign: 'center',
+              pointerEvents: 'auto' // Permitir eventos de ratón en el panel
+            }}>
+              {impactDetails.accion}
+            </div>
+          </div>
+        </>
+      )}
     </div>
   );
 };
 
 export default Asteroid3DViewer;
+
