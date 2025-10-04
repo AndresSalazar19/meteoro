@@ -9,7 +9,7 @@ export default function Nav() {
      <div className='flex flex-col md:flex-row md:space-x-10 text-white text-3xl drop-shadow-lg pb-5 space-y-4 md:space-y-0'>
         <Link to='/meteoritos' className='lilita' >Meteoritos </Link>
         <Link to='/simulaciones' className='lilita'>Simulaciones</Link>
-        <Link to='/informacion' className='lilita'> Información   </Link>
+        <Link to='/listaMeteoritos' className='lilita'> Lista de Meteoritos</Link>
     </div>
     </>
   );

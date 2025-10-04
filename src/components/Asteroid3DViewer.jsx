@@ -2,6 +2,7 @@
 
 import React, { useEffect, useRef, useState, useCallback } from 'react';
 import * as THREE from 'three';
+import { useLocation, useNavigate } from 'react-router-dom'; // Importa useLocation y useNavigate
 
 // Constantes y funciones helper (fuera del componente para evitar re-creación)
 const DEFAULT_DENSITY = 2500; // kg/m^3
@@ -65,6 +66,8 @@ const randomColor = () => Math.floor(Math.random() * 0xffffff);
 // --- Componente principal ---
 const Asteroid3DViewer = () => {
   const mountRef = useRef(null);
+  const location = useLocation(); // Hook para acceder al estado de la ruta
+  const navigate = useNavigate(); // Hook para navegar programáticamente
 
   // Referencias para objetos de Three.js que necesitan persistir
   const sceneRef = useRef(null);
@@ -166,6 +169,7 @@ const Asteroid3DViewer = () => {
       asteroidMeshes.push(asteroid);
     });
   }, []);
+
 
   // --- useEffect para inicialización de Three.js y carga de API (se ejecuta una vez) ---
   useEffect(() => {
@@ -427,6 +431,62 @@ const Asteroid3DViewer = () => {
     };
   }, []); // Se ejecuta solo una vez al montar
 
+  // --- useEffect para procesar datos de simulación pasados por la ruta ---
+  // Este useEffect se encargará de inicializar la simulación si se navega desde DetalleMeteorito
+  useEffect(() => {
+    if (location.state?.simulatedAsteroidData) {
+      const { name, a, e, i, diamMinKm, diamMaxKm, H, closeApproachData } = location.state.simulatedAsteroidData;
+
+      const vKms = pickVelocityKmsFromApproaches(closeApproachData, 'Earth');
+
+      let energyMt = null;
+      let severity = null;
+      let diameterKmUsed = null;
+
+      if (vKms && vKms > 0) {
+        const eCalc = computeEnergyMt({ diamMinKm, diamMaxKm, H, velocityKms: vKms });
+        if (eCalc) {
+          energyMt = eCalc.energyMt;
+          severity = tierFromEnergyMt(energyMt);
+          diameterKmUsed = eCalc.diameterKm;
+        }
+      } else {
+        diameterKmUsed = chooseDiameterKm(diamMinKm, diamMaxKm, H);
+      }
+
+      const parsedSimulatedAsteroid = {
+        name: name,
+        a: a,
+        e: e,
+        i: i,
+        size: diameterKmUsed || 0.05,
+        color: randomColor(),
+        energyMt,
+        severity,
+        velocityKms: vKms,
+        diameterKm: diameterKmUsed,
+      };
+
+      // Agrega el asteroide simulado a la lista de asteroides manuales
+      setManualAsteroids((prev) => {
+        // Evita duplicados si se navega varias veces o se refresca con el mismo estado
+        if (!prev.some(ast => ast.name === parsedSimulatedAsteroid.name)) {
+          return [...prev, parsedSimulatedAsteroid];
+        }
+        return prev;
+      });
+      setLastSimulatedAsteroid(parsedSimulatedAsteroid); // Establece este como el asteroide de la simulación actual
+      setFilterTerm(name); // Filtra por su nombre para mostrarlo únicamente
+      setViewMode('manual'); // Cambia a modo manual para verlo
+      setViewState('simulation'); // Cambia a la vista de simulación
+
+      // Limpia el estado de la localización para evitar que se reprocese en renders posteriores
+      // Esto es crucial para que la simulación no se "reinicie" si el componente se re-renderiza
+      // sin una nueva navegación.
+      navigate(location.pathname, { replace: true, state: {} }); // Reemplaza el estado actual en el historial
+    }
+  }, [location.state, navigate]); // Depende de location.state y navigate para su ejecución
+
   // --- useEffect para actualizar la visualización de asteroides (se ejecuta al cambiar datos/filtro/viewMode) ---
   useEffect(() => {
     let asteroidsToDisplay = [];
@@ -471,8 +531,8 @@ const Asteroid3DViewer = () => {
 
   }, [apiAsteroids, manualAsteroids, filterTerm, viewMode, viewState, lastSimulatedAsteroid, updateAsteroidsInScene]);
 
-  // --- HANDLER PARA EL BOTÓN "SIMULAR" ---
-  const handleSimulate = useCallback(() => {
+  // --- HANDLER PARA EL BOTÓN "SIMULAR" (DESDE EL FORMULARIO MANUAL) ---
+  const handleSimulateFromForm = useCallback(() => { // Renombrado para evitar confusión con el de DetalleMeteorito
     const vKms = parseFloat(newAsteroidVelocity);
     const diamMinKm = parseFloat(newAsteroidDiamMin);
     const diamMaxKm = parseFloat(newAsteroidDiamMax);
@@ -507,10 +567,10 @@ const Asteroid3DViewer = () => {
     };
 
     setManualAsteroids((prevAsteroids) => [...prevAsteroids, newAsteroid]);
-    setLastSimulatedAsteroid(newAsteroid); // Guardar el asteroide para la vista de simulación
-    setFilterTerm(newAsteroid.name);       // Filtrar por el nombre del nuevo asteroide
-    setViewMode('manual');                 // Asegurar que el modo manual esté activo
-    setViewState('simulation');            // Cambiar a la vista de simulación
+    setLastSimulatedAsteroid(newAsteroid); // Guarda el asteroide para la vista de simulación
+    setFilterTerm(newAsteroid.name);       // Filtra por el nombre del nuevo asteroide
+    setViewMode('manual');                 // Asegura que el modo manual esté activo
+    setViewState('simulation');            // Cambia a la vista de simulación
 
     // Limpiar formulario después de agregar
     setNewAsteroidName('');
@@ -666,7 +726,7 @@ const Asteroid3DViewer = () => {
             </div>
           </div>
 
-          <button onClick={handleSimulate} style={{
+          <button onClick={handleSimulateFromForm} style={{
             backgroundColor: '#FF0000',
             color: 'white',
             padding: '15px 40px',
