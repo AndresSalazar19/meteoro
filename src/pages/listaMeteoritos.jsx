@@ -114,8 +114,8 @@ export default function ListaMeteoritos() {
                         Diámetro: {it.diameterKmMin?.toFixed?.(3) ?? "?"}–{it.diameterKmMax?.toFixed?.(3) ?? "?"} km
                       </p>
                     </div>
-                    <div className="flex items-center gap-3">
-                      <span className={`text-xs px-2 py-1 rounded-full ${it.hazardous ? "bg-red-500/20 text-red-300" : "bg-green-500/20 text-green-200"}`}>
+                    <div className="flex items-center gap-3 ">
+                      <span className={`p-2 text-xs rounded-full text-center ${it.hazardous ? "bg-red-500/20 text-red-300" : "bg-green-500/20 text-green-200"}`}>
                         {it.hazardous ? "Peligroso" : "No peligroso"}
                       </span>
                       {/* Link al detalle por id */}
