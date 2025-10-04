@@ -1,3 +1,5 @@
+* { box-sizing: border-box; }
+
 :root {
   line-height: 1.5;
   font-weight: 400;
@@ -12,15 +14,26 @@
   -moz-osx-font-smoothing: grayscale;
 }
 
+html, body, #root {
+  height: 100%;
+}
 
+html, body {
+  margin: 0;
+  overflow-x: hidden;        /* evita “espacio” por overflow */
+  background: #000;
+  color: #fff;
+}
 
 body {
-  margin: 0;
   display: flex;
-  place-items: center;
-  min-width: 320px;
+  align-items: center;        /* en vez de place-items */
+  justify-content: center;
   min-height: 100vh;
+  /* quita min-width si no es estrictamente necesario */
+  /* min-width: 320px; */
 }
+
 
 h1 {
   font-size: 3.2em;

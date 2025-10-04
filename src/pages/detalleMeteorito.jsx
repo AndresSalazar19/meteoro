@@ -115,6 +115,10 @@ export default function DetalleMeteorito() {
           <p className="text-white/70 text-sm">No hay registros inmediatos en el feed consultado.</p>
         )}
       </div>
+
+        </div>
+      </div>
     </div>
+
   );
 }
