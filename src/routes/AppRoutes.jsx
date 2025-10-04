@@ -3,7 +3,8 @@ import Asteorid3Dviewer from "../components/Asteroid3DViewer";
 import MainLayout from "../layouts/MainLayout";
 import Home from "../pages/home";
 import Simulaciones from "../pages/simulaciones";
-import Informacion from "../pages/informacion";
+import ListaMeteoritos from "../pages/listaMeteoritos";
+import DetalleMeteorito from "../pages/detalleMeteorito";
 
 export default function AppRoutes() {
   return (
@@ -31,11 +32,22 @@ export default function AppRoutes() {
           </MainLayout>
         }
       />
-        <Route
-        path="/informacion"
+      {/* Lista de meteoritos */}
+      <Route
+        path="/listaMeteoritos"
         element={
           <MainLayout>
-            <Informacion />
+            <ListaMeteoritos />
+          </MainLayout>
+        }
+      />
+
+      {/* Detalle por id */}
+      <Route
+        path="/meteoritos/:id"
+        element={
+          <MainLayout>
+            <DetalleMeteorito />
           </MainLayout>
         }
       />

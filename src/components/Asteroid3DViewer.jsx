@@ -888,4 +888,3 @@ const Asteroid3DViewer = () => {
 };
 
 export default Asteroid3DViewer;
-
