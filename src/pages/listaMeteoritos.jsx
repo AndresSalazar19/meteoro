@@ -58,18 +58,6 @@ export default function ListaMeteoritos() {
   return (
     <div className="max-w-3xl mx-auto px-4 py-6 text-left">
 
-          <div className="flex w-full h-screen">
-      {/* Div izquierdo (10%) */}
-      <div className="w-[10%] flex items-start justify-start">
-        {/* Aquí iría tu botón */}
-      </div>
-
-      {/* Div derecho (90%) */}
-      <div className="w-[90%] flex items-start justify-start">
-        {/* Aquí va el contenido principal */}
-      </div>
-    </div>
-
       {/* Botón volver arriba del título, usando react-router-dom */}
       <div>
       <Link
