@@ -6,7 +6,7 @@ export default function DetalleMeteorito() {
   const navigate = useNavigate(); // Inicializa el hook de navegación
   const [neo, setNeo] = useState(null);
   const [loading, setLoading] = useState(true);
-
+  
   useEffect(() => {
     const controller = new AbortController();
     const API_KEY = import.meta.env.VITE_NASA_API_KEY || '2KzpzDksQWT2D2csD9Ja9wrdX8ruTcS290hH2mBK';
