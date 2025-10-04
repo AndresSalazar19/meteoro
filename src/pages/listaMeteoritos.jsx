@@ -76,7 +76,7 @@ export default function ListaMeteoritos() {
       <div className="w-[90%] flex items-start justify-start">
         <div>
           <h1 className="text-3xl font-semibold text-white">Lista de Meteoritos</h1>
-          <p className="text-white/80">Todos los meteoritos en un solo lugar. Busca, filtra y elige el que quieras.</p>
+          <p className="text-white/80">Todos los meteoritos en un solo lugar.  Busca, filtra y elige el que quieras.</p>
 
           {/* Buscador simple */}
           <div className="mt-4 flex gap-4">
@@ -110,8 +110,8 @@ export default function ListaMeteoritos() {
                     <div>
                       <h3 className="text-xl text-white font-medium">{it.name}</h3>
                       <p className="text-white/70 text-sm">
-                        {it.approachDate !== "—" ? `Aproximación: ${it.approachDate} · ` : ""}
-                        Diámetro: {it.diameterKmMin?.toFixed?.(3) ?? "?"}–{it.diameterKmMax?.toFixed?.(3) ?? "?"} km
+                        {it.approachDate !== "—" ? `Aproximación: ${it.approachDate} · ` : ""} <br />
+                         Diámetro: {it.diameterKmMin?.toFixed?.(3) ?? "?"}–{it.diameterKmMax?.toFixed?.(3) ?? "?"} km
                       </p>
                     </div>
                     <div className="flex items-center gap-3 ">
