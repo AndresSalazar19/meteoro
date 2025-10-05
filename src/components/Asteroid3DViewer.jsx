@@ -30,6 +30,74 @@ function Asteroid3DViewer({ onAsteroidsLoaded, onAsteroidSimulated, asteroids = 
   const [isSimulated, setIsSimulated] = useState(false);
   const [isPaused, setIsPaused] = useState(false);
 
+  // Scene-wide constants available to both the mount effect and prop-change effect
+  const R_EARTH_SCENE = 63.78;
+  const EARTH_ORBIT_IN_EARTH_RADII = 50;
+  const ORBIT_SCALE = R_EARTH_SCENE * EARTH_ORBIT_IN_EARTH_RADII;
+  const MIN_ASTEROID_RADIUS_KM = 0.05;
+  const ASTEROID_UNIFORM_SCALE = 100;
+  const MAX_SCENE_RADIUS = R_EARTH_SCENE * 0.6;
+
+  // Refs to objects created inside the mount effect so other effects can access them
+  const sceneRef = useRef(null);
+  const orbitGroupRef = useRef(null);
+
+  // Helper to add asteroid data into the scene; safe to call from any effect after mount
+  const addAsteroidsToScene = (dataList) => {
+    if (!sceneRef.current || !orbitGroupRef.current) return;
+    const orbitGroup = orbitGroupRef.current;
+    dataList.forEach((data) => {
+      try {
+        const scaledA = data.a * ORBIT_SCALE;
+        const orbitPoints = [];
+        const segments = 128;
+        for (let j = 0; j <= segments; j++) {
+          const theta = (j / segments) * Math.PI * 2;
+          const r = (scaledA * (1 - data.e * data.e)) / (1 + data.e * Math.cos(theta));
+          const x = r * Math.cos(theta);
+          const z = r * Math.sin(theta);
+          const y = z * Math.sin(data.i * Math.PI / 180);
+          const zAdjusted = z * Math.cos(data.i * Math.PI / 180);
+          orbitPoints.push(new THREE.Vector3(x, y, zAdjusted));
+        }
+
+        const orbitGeometry = new THREE.BufferGeometry().setFromPoints(orbitPoints);
+        const orbitMaterial = new THREE.LineBasicMaterial({
+          color: data.color,
+          transparent: true,
+          opacity: 0.4
+        });
+        const orbitLine = new THREE.Line(orbitGeometry, orbitMaterial);
+        orbitLine.userData = { name: data.name };
+        orbitGroup.add(orbitLine);
+
+        let physicalRadiusKm = Math.max(data.size, MIN_ASTEROID_RADIUS_KM);
+        let radiusScene = physicalRadiusKm * ASTEROID_UNIFORM_SCALE;
+        if (radiusScene > MAX_SCENE_RADIUS) radiusScene = MAX_SCENE_RADIUS;
+
+        const asteroidGeometry = new THREE.SphereGeometry(radiusScene, 16, 16);
+        const asteroidMaterial = new THREE.MeshPhongMaterial({
+          color: data.color,
+          shininess: 5
+        });
+        const asteroid = new THREE.Mesh(asteroidGeometry, asteroidMaterial);
+        asteroid.userData = {
+          name: data.name,
+          type: 'asteroid',
+          orbit: data,
+          orbitPoints,
+          orbitLine,
+          currentIndex: 0
+        };
+        asteroid.position.copy(orbitPoints[0]);
+        sceneRef.current.add(asteroid);
+        asteroidMeshesRef.current.push(asteroid);
+      } catch (e) {
+        console.warn('Error adding asteroid to scene', e);
+      }
+    });
+  };
+
   const onAsteroidClick = (asteroid) => {
     if (!asteroid) {
       console.log('Asteroide no encontrado');
@@ -137,15 +205,11 @@ function Asteroid3DViewer({ onAsteroidsLoaded, onAsteroidSimulated, asteroids = 
     if (!mount) return;
 
     const scene = new THREE.Scene();
+    sceneRef.current = scene;
     const earthSystem = new THREE.Group();
     scene.add(earthSystem);
     
-    const R_EARTH_SCENE = 63.78;
-    const EARTH_ORBIT_IN_EARTH_RADII = 50;
-    const ORBIT_SCALE = R_EARTH_SCENE * EARTH_ORBIT_IN_EARTH_RADII;
-    const MIN_ASTEROID_RADIUS_KM = 0.05;
-    const ASTEROID_UNIFORM_SCALE = 100;
-    const MAX_SCENE_RADIUS = R_EARTH_SCENE * 0.6;
+  // (constants are defined in component scope)
 
     let cameraDistance = 1000;
     cameraRef.current = new THREE.PerspectiveCamera(75, mount.clientWidth / mount.clientHeight, 0.1, 20000);
@@ -206,7 +270,8 @@ function Asteroid3DViewer({ onAsteroidsLoaded, onAsteroidSimulated, asteroids = 
     earthSystem.add(atmosphere);
 
     const orbitGroup = new THREE.Group();
-    scene.add(orbitGroup);
+  scene.add(orbitGroup);
+  orbitGroupRef.current = orbitGroup;
 
     const moonRadius = R_EARTH_SCENE * 0.27;
     const moonDistance = R_EARTH_SCENE * 10;
@@ -259,55 +324,7 @@ function Asteroid3DViewer({ onAsteroidsLoaded, onAsteroidSimulated, asteroids = 
 
     const randomColor = () => Math.floor(Math.random() * 0xffffff);
 
-    const addAsteroidsToScene = (dataList) => {
-      dataList.forEach((data) => {
-        const scaledA = data.a * ORBIT_SCALE;
-        const orbitPoints = [];
-        const segments = 128;
-        
-        for (let j = 0; j <= segments; j++) {
-          const theta = (j / segments) * Math.PI * 2;
-          const r = (scaledA * (1 - data.e * data.e)) / (1 + data.e * Math.cos(theta));
-          const x = r * Math.cos(theta);
-          const z = r * Math.sin(theta);
-          const y = z * Math.sin(data.i * Math.PI / 180);
-          const zAdjusted = z * Math.cos(data.i * Math.PI / 180);
-          orbitPoints.push(new THREE.Vector3(x, y, zAdjusted));
-        }
-        
-        const orbitGeometry = new THREE.BufferGeometry().setFromPoints(orbitPoints);
-        const orbitMaterial = new THREE.LineBasicMaterial({
-          color: data.color,
-          transparent: true,
-          opacity: 0.4
-        });
-  const orbitLine = new THREE.Line(orbitGeometry, orbitMaterial);
-  orbitLine.userData = { name: data.name };
-  orbitGroup.add(orbitLine);
-
-        let physicalRadiusKm = Math.max(data.size, MIN_ASTEROID_RADIUS_KM);
-        let radiusScene = physicalRadiusKm * ASTEROID_UNIFORM_SCALE;
-        if (radiusScene > MAX_SCENE_RADIUS) radiusScene = MAX_SCENE_RADIUS;
-        
-        const asteroidGeometry = new THREE.SphereGeometry(radiusScene, 16, 16);
-        const asteroidMaterial = new THREE.MeshPhongMaterial({
-          color: data.color,
-          shininess: 5
-        });
-        const asteroid = new THREE.Mesh(asteroidGeometry, asteroidMaterial);
-        asteroid.userData = {
-          name: data.name,
-          type: 'asteroid',
-          orbit: data,
-          orbitPoints,
-          orbitLine,
-          currentIndex: 0
-        };
-        asteroid.position.copy(orbitPoints[0]);
-        scene.add(asteroid);
-        asteroidMeshesRef.current.push(asteroid);
-      });
-    };
+  // use the outer addAsteroidsToScene defined in component scope
 
     const controller = new AbortController();
     const API_KEY = import.meta.env.VITE_NASA_API_KEY || '2KzpzDksQWT2D2csD9Ja9wrdX8ruTcS290hH2mBK';
@@ -385,7 +402,7 @@ function Asteroid3DViewer({ onAsteroidsLoaded, onAsteroidSimulated, asteroids = 
     }
   };
 
-    fetchAsteroids();
+  fetchAsteroids();
 
     const starsGeometry = new THREE.BufferGeometry();
     const starsMaterial = new THREE.PointsMaterial({ 
@@ -550,6 +567,28 @@ function Asteroid3DViewer({ onAsteroidsLoaded, onAsteroidSimulated, asteroids = 
       }
     };
   }, []);
+
+  // When the `asteroids` prop changes (manual additions), add any new entries to the scene
+  React.useEffect(() => {
+    try {
+      if (!asteroids || !asteroids.length) return;
+
+      // Ensure the scene has been initialized
+      if (!sceneRef.current) return;
+
+      // Find which asteroid names are already present in the scene
+      const existingNames = new Set(asteroidMeshesRef.current.map(m => m.userData?.name));
+      const toAdd = asteroids.filter(a => !existingNames.has(a.name));
+      if (toAdd.length === 0) return;
+
+      // Add the missing asteroids into the scene
+      addAsteroidsToScene(toAdd);
+      // Optionally notify parent about API asteroids
+      if (onAsteroidsLoaded) onAsteroidsLoaded(asteroids.filter(a => a.source === 'api'));
+    } catch (e) {
+      console.warn('Error processing asteroids prop', e);
+    }
+  }, [asteroids]);
 
   // Effect: respond to viewMode / filterTerm changes by toggling visibility
   React.useEffect(() => {

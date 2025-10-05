@@ -8,7 +8,6 @@ const WhatIfForm = ({ onSimulate, onViewStateChange }) => {
     inclination: '10',
     diamMin: '0.1',
     diamMax: '0.2',
-    absoluteMagnitude: '20',
     velocity: '15'
   });
 
@@ -17,21 +16,23 @@ const WhatIfForm = ({ onSimulate, onViewStateChange }) => {
   };
 
   const handleSubmit = () => {
+    // Calcular el diámetro promedio y radio igual que la API de NASA
+    const dMin = parseFloat(formData.diamMin) || 0;
+    const dMax = parseFloat(formData.diamMax) || dMin || 0;
+    const avgDiameterKm = (dMin + dMax) / 2;
+    const radiusKm = avgDiameterKm / 2;
+
     const simulationData = {
       name: formData.name || `Manual-${Date.now().toString().slice(-4)}`,
       a: parseFloat(formData.semiMajorAxis) || 1,
       e: parseFloat(formData.eccentricity) || 0,
       i: parseFloat(formData.inclination) || 0,
-      diamMinKm: parseFloat(formData.diamMin),
-      diamMaxKm: parseFloat(formData.diamMax),
-      H: parseFloat(formData.absoluteMagnitude),
+      diamMinKm: dMin,
+      diamMaxKm: dMax,
       velocityKms: parseFloat(formData.velocity)
     };
 
-    // Llamar al callback de simulación
     onSimulate(simulationData);
-    
-    // Cambiar el estado de vista a 'simulation'
     onViewStateChange('simulation');
   };
 
@@ -55,10 +56,10 @@ const WhatIfForm = ({ onSimulate, onViewStateChange }) => {
         WHAT IF ?
       </h1>
       <p style={{ fontSize: '1.2em', marginBottom: '5px', color: '#ccc' }}>
-        Simula escenarios en segundos
+        Simula escenarios de impacto de asteroides
       </p>
       <p style={{ fontSize: '1.2em', marginBottom: '30px', color: '#ccc' }}>
-        Cambia las variables y mira el impacto en tiempo real.
+        Configura los parámetros orbitales y físicos del asteroide
       </p>
 
       <div style={{
@@ -67,19 +68,21 @@ const WhatIfForm = ({ onSimulate, onViewStateChange }) => {
         gap: '20px 40px',
         marginBottom: '40px',
         width: '80%',
-        maxWidth: '800px'
+        maxWidth: '900px'
       }}>
-        {/* Variable 1: Nombre */}
-        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-          <label style={{ fontSize: '1.1em', minWidth: '120px' }}>Variable 1:</label>
+        {/* Nombre del Asteroide */}
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+          <label style={{ fontSize: '1.1em', color: '#4CAF50', fontWeight: 'bold' }}>
+            Nombre del Asteroide
+          </label>
           <input
             type="text"
             value={formData.name}
             onChange={(e) => handleChange('name', e.target.value)}
-            placeholder="Nombre"
+            placeholder="Ej: Apophis"
             style={{
-              width: 'calc(100% - 130px)',
-              padding: '8px',
+              width: '100%',
+              padding: '10px',
               border: '1px solid #555',
               borderRadius: '5px',
               background: '#333',
@@ -87,11 +90,16 @@ const WhatIfForm = ({ onSimulate, onViewStateChange }) => {
               fontSize: '1em'
             }}
           />
+          <span style={{ fontSize: '0.85em', color: '#888' }}>
+            Nombre identificador del asteroide
+          </span>
         </div>
 
-        {/* Variable 2: Semieje Mayor */}
-        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-          <label style={{ fontSize: '1.1em', minWidth: '120px' }}>Variable 2:</label>
+        {/* Semieje Mayor (a) */}
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+          <label style={{ fontSize: '1.1em', color: '#4CAF50', fontWeight: 'bold' }}>
+            Semieje Mayor (AU)
+          </label>
           <input
             type="number"
             step="0.1"
@@ -99,8 +107,8 @@ const WhatIfForm = ({ onSimulate, onViewStateChange }) => {
             onChange={(e) => handleChange('semiMajorAxis', e.target.value)}
             placeholder="1.5"
             style={{
-              width: 'calc(100% - 130px)',
-              padding: '8px',
+              width: '100%',
+              padding: '10px',
               border: '1px solid #555',
               borderRadius: '5px',
               background: '#333',
@@ -108,20 +116,27 @@ const WhatIfForm = ({ onSimulate, onViewStateChange }) => {
               fontSize: '1em'
             }}
           />
+          <span style={{ fontSize: '0.85em', color: '#888' }}>
+            Distancia promedio al Sol (1 AU = Tierra)
+          </span>
         </div>
 
-        {/* Variable 3: Excentricidad */}
-        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-          <label style={{ fontSize: '1.1em', minWidth: '120px' }}>Variable 3:</label>
+        {/* Excentricidad (e) */}
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+          <label style={{ fontSize: '1.1em', color: '#4CAF50', fontWeight: 'bold' }}>
+            Excentricidad
+          </label>
           <input
             type="number"
             step="0.01"
+            min="0"
+            max="0.99"
             value={formData.eccentricity}
             onChange={(e) => handleChange('eccentricity', e.target.value)}
             placeholder="0.1"
             style={{
-              width: 'calc(100% - 130px)',
-              padding: '8px',
+              width: '100%',
+              padding: '10px',
               border: '1px solid #555',
               borderRadius: '5px',
               background: '#333',
@@ -129,11 +144,16 @@ const WhatIfForm = ({ onSimulate, onViewStateChange }) => {
               fontSize: '1em'
             }}
           />
+          <span style={{ fontSize: '0.85em', color: '#888' }}>
+            Forma de la órbita (0 = circular, 0.99 = muy elíptica)
+          </span>
         </div>
 
-        {/* Variable 4: Inclinación */}
-        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-          <label style={{ fontSize: '1.1em', minWidth: '120px' }}>Variable 4:</label>
+        {/* Inclinación (i) */}
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+          <label style={{ fontSize: '1.1em', color: '#4CAF50', fontWeight: 'bold' }}>
+            Inclinación (grados)
+          </label>
           <input
             type="number"
             step="1"
@@ -141,8 +161,8 @@ const WhatIfForm = ({ onSimulate, onViewStateChange }) => {
             onChange={(e) => handleChange('inclination', e.target.value)}
             placeholder="10"
             style={{
-              width: 'calc(100% - 130px)',
-              padding: '8px',
+              width: '100%',
+              padding: '10px',
               border: '1px solid #555',
               borderRadius: '5px',
               background: '#333',
@@ -150,20 +170,26 @@ const WhatIfForm = ({ onSimulate, onViewStateChange }) => {
               fontSize: '1em'
             }}
           />
+          <span style={{ fontSize: '0.85em', color: '#888' }}>
+            Ángulo de inclinación orbital respecto al plano de la Tierra
+          </span>
         </div>
 
-        {/* Variable 5: Diámetro Mínimo */}
-        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-          <label style={{ fontSize: '1.1em', minWidth: '120px' }}>Variable 5:</label>
+        {/* Diámetro Mínimo */}
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+          <label style={{ fontSize: '1.1em', color: '#FF9800', fontWeight: 'bold' }}>
+            Diámetro Mínimo (km)
+          </label>
           <input
             type="number"
             step="0.01"
+            min="0.01"
             value={formData.diamMin}
             onChange={(e) => handleChange('diamMin', e.target.value)}
             placeholder="0.1"
             style={{
-              width: 'calc(100% - 130px)',
-              padding: '8px',
+              width: '100%',
+              padding: '10px',
               border: '1px solid #555',
               borderRadius: '5px',
               background: '#333',
@@ -171,20 +197,26 @@ const WhatIfForm = ({ onSimulate, onViewStateChange }) => {
               fontSize: '1em'
             }}
           />
+          <span style={{ fontSize: '0.85em', color: '#888' }}>
+            Estimación inferior del tamaño
+          </span>
         </div>
 
-        {/* Variable 6: Diámetro Máximo */}
-        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-          <label style={{ fontSize: '1.1em', minWidth: '120px' }}>Variable 6:</label>
+        {/* Diámetro Máximo */}
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+          <label style={{ fontSize: '1.1em', color: '#FF9800', fontWeight: 'bold' }}>
+            Diámetro Máximo (km)
+          </label>
           <input
             type="number"
             step="0.01"
+            min="0.01"
             value={formData.diamMax}
             onChange={(e) => handleChange('diamMax', e.target.value)}
             placeholder="0.2"
             style={{
-              width: 'calc(100% - 130px)',
-              padding: '8px',
+              width: '100%',
+              padding: '10px',
               border: '1px solid #555',
               borderRadius: '5px',
               background: '#333',
@@ -192,32 +224,16 @@ const WhatIfForm = ({ onSimulate, onViewStateChange }) => {
               fontSize: '1em'
             }}
           />
+          <span style={{ fontSize: '0.85em', color: '#888' }}>
+            Estimación superior del tamaño
+          </span>
         </div>
 
-        {/* Variable 7: Magnitud Absoluta */}
-        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-          <label style={{ fontSize: '1.1em', minWidth: '120px' }}>Variable 7:</label>
-          <input
-            type="number"
-            step="0.1"
-            value={formData.absoluteMagnitude}
-            onChange={(e) => handleChange('absoluteMagnitude', e.target.value)}
-            placeholder="20"
-            style={{
-              width: 'calc(100% - 130px)',
-              padding: '8px',
-              border: '1px solid #555',
-              borderRadius: '5px',
-              background: '#333',
-              color: 'white',
-              fontSize: '1em'
-            }}
-          />
-        </div>
-
-        {/* Variable 8: Velocidad */}
-        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-          <label style={{ fontSize: '1.1em', minWidth: '120px' }}>Variable 8:</label>
+        {/* Velocidad */}
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+          <label style={{ fontSize: '1.1em', color: '#2196F3', fontWeight: 'bold' }}>
+            Velocidad (km/s)
+          </label>
           <input
             type="number"
             step="0.1"
@@ -225,8 +241,8 @@ const WhatIfForm = ({ onSimulate, onViewStateChange }) => {
             onChange={(e) => handleChange('velocity', e.target.value)}
             placeholder="15"
             style={{
-              width: 'calc(100% - 130px)',
-              padding: '8px',
+              width: '100%',
+              padding: '10px',
               border: '1px solid #555',
               borderRadius: '5px',
               background: '#333',
@@ -234,6 +250,35 @@ const WhatIfForm = ({ onSimulate, onViewStateChange }) => {
               fontSize: '1em'
             }}
           />
+          <span style={{ fontSize: '0.85em', color: '#888' }}>
+            Velocidad orbital promedio
+          </span>
+        </div>
+
+        {/* Info calculada */}
+        <div style={{
+          display: 'flex',
+          flexDirection: 'column',
+          gap: '8px',
+          background: 'rgba(76, 175, 80, 0.1)',
+          padding: '15px',
+          borderRadius: '5px',
+          border: '1px solid rgba(76, 175, 80, 0.3)'
+        }}>
+          <label style={{ fontSize: '1.1em', color: '#4CAF50', fontWeight: 'bold' }}>
+            Cálculos Automáticos
+          </label>
+          <div style={{ fontSize: '0.9em', color: '#ccc' }}>
+            <p style={{ margin: '5px 0' }}>
+              Diámetro Promedio: {((parseFloat(formData.diamMin) + parseFloat(formData.diamMax)) / 2 || 0).toFixed(3)} km
+            </p>
+            <p style={{ margin: '5px 0' }}>
+              Radio: {(((parseFloat(formData.diamMin) + parseFloat(formData.diamMax)) / 2) / 2 || 0).toFixed(3)} km
+            </p>
+          </div>
+          <span style={{ fontSize: '0.85em', color: '#888' }}>
+            Calculado automáticamente igual que NASA API
+          </span>
         </div>
       </div>
 
@@ -252,8 +297,16 @@ const WhatIfForm = ({ onSimulate, onViewStateChange }) => {
           transition: 'background-color 0.3s, box-shadow 0.3s',
           marginBottom: '40px'
         }}
+        onMouseOver={(e) => {
+          e.target.style.backgroundColor = '#CC0000';
+          e.target.style.boxShadow = '0 0 25px rgba(255,0,0,0.8)';
+        }}
+        onMouseOut={(e) => {
+          e.target.style.backgroundColor = '#FF0000';
+          e.target.style.boxShadow = '0 0 15px rgba(255,0,0,0.6)';
+        }}
       >
-        SIMULAR
+        SIMULAR IMPACTO
       </button>
     </div>
   );

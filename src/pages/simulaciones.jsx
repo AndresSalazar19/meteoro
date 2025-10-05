@@ -18,18 +18,37 @@ export default function Simulaciones() {
 
   // Callback para ocultar el panel después de submit y agregar asteroide manual
   const handleSimulate = (simulationData) => {
-    const diamMin = parseFloat(simulationData.diamMinKm || 0) || 0;
-    const diamMax = parseFloat(simulationData.diamMaxKm || 0) || diamMin || 0;
-    const avgDiameter = (diamMin + diamMax) / 2 || diamMin || 0;
-    const radiusKm = avgDiameter / 2 || 0.05;
+    // Support both the new shape (orbital, kmData, dMin/dMax, avgDiameterKm, radiusKm)
+    // and the previous shape (diamMinKm, diamMaxKm, name, a, e, i)
+    const dMin = typeof simulationData.dMin !== 'undefined'
+      ? Number(simulationData.dMin)
+      : Number(simulationData.diamMinKm || 0);
+    const dMax = typeof simulationData.dMax !== 'undefined'
+      ? Number(simulationData.dMax)
+      : Number(simulationData.diamMaxKm || dMin || 0);
+
+    const avgDiameter = typeof simulationData.avgDiameterKm !== 'undefined'
+      ? Number(simulationData.avgDiameterKm)
+      : (dMin + dMax) / 2 || dMin || 0;
+
+    const radiusKm = typeof simulationData.radiusKm !== 'undefined'
+      ? Number(simulationData.radiusKm)
+      : (avgDiameter / 2) || 0.05;
+
+    // Orbital data: prefer simulationData.orbital if provided
+    const orbital = simulationData.orbital || {
+      semi_major_axis: simulationData.a,
+      eccentricity: simulationData.e,
+      inclination: simulationData.i
+    };
 
     const manual = {
-      name: simulationData.name,
-      a: simulationData.a,
-      e: simulationData.e,
-      i: simulationData.i,
+      name: simulationData.name || `Manual-${Date.now().toString().slice(-4)}`,
+      a: Number(orbital.semi_major_axis) || Number(simulationData.a) || 1,
+      e: Number(orbital.eccentricity) || Number(simulationData.e) || 0,
+      i: Number(orbital.inclination) || Number(simulationData.i) || 0,
       size: radiusKm, // viewer expects `size` as radius in km
-      velocity: simulationData.velocityKms || null,
+      velocity: simulationData.velocityKms || simulationData.velocity || null,
       color: Math.floor(Math.random() * 0xffffff),
       source: 'manual',
       severity: radiusKm > 0.5 ? 'HIGH' : 'LOW'
@@ -48,6 +67,7 @@ export default function Simulaciones() {
         <WhatIfPanel onSimulate={handleSimulate} onViewStateChange={() => setShowWhatIf(false)} />
       )}
       <Asteorid3Dviewer
+        asteroids={[...apiAsteroids, ...manualAsteroids]}
         onAsteroidsLoaded={(list) => setApiAsteroids(list)}
         onAsteroidSimulated={(ast) => setSelectedAsteroid(ast)}
         viewMode={viewMode}
