@@ -9,7 +9,21 @@ import PlayCircleIcon from '@mui/icons-material/PlayCircle';
 
 import * as THREE from 'three';
 
-function Asteroid3DViewer({ onAsteroidsLoaded, onAsteroidSimulated, asteroids = [], viewMode = 'all', filterTerm = '' }) {
+function Asteroid3DViewer({ onAsteroidsLoaded, onAsteroidSimulated, asteroids = [], viewMode = 'all', filterTerm = '', selectedAsteroid }) {
+  // Efecto: resaltar asteroide cuando selectedAsteroid cambia desde fuera
+  useEffect(() => {
+    if (!selectedAsteroid || !asteroidMeshesRef.current.length) return;
+    // Buscar el mesh correspondiente por nombre (idealmente usar id único)
+    const mesh = asteroidMeshesRef.current.find(m => m.userData?.name === selectedAsteroid.name);
+    // Quitar resaltado al anterior
+    if (selectedAsteroidRef.current && selectedAsteroidRef.current !== mesh) {
+      selectedAsteroidRef.current.material.emissive.setHex(0x000000);
+    }
+    if (mesh) {
+      mesh.material.emissive = new THREE.Color(0xffff00);
+      selectedAsteroidRef.current = mesh;
+    }
+  }, [selectedAsteroid]);
   const mountRef = useRef(null);
   const cameraRef = useRef(null);
   const earthRef = useRef(null);
@@ -747,7 +761,7 @@ function Asteroid3DViewer({ onAsteroidsLoaded, onAsteroidSimulated, asteroids = 
             e: parseFloat(orbital.eccentricity) || 0,
             i: parseFloat(orbital.inclination) || 0,
             size: typeof radiusKm === 'number' ? radiusKm : 0.05,
-            velocity: velocity,
+            velocityKms: velocity,
             color: randomColor(),
             source: 'api',
             severity: neo.is_potentially_hazardous_asteroid ? 'HIGH' : 'LOW'
@@ -840,19 +854,25 @@ function Asteroid3DViewer({ onAsteroidsLoaded, onAsteroidSimulated, asteroids = 
           }
           asteroid.material.emissive = new THREE.Color(0xffff00); // color amarillo brillante
           selectedAsteroidRef.current = asteroid;
+          // Enviar todos los datos relevantes del asteroide
+          const orbit = asteroid.userData.orbit || {};
           onAsteroidSimulated({
             name: asteroid.userData.name,
-            a: asteroid.userData.orbit.a,
-            e: asteroid.userData.orbit.e,
-            i: asteroid.userData.orbit.i,
-            diameterKm: asteroid.userData.orbit.size * 2,
-            velocityKms: asteroid.userData.orbit.velocity || null,
-            severity: asteroid.userData.orbit.severity || 'LOW'
+            a: orbit.a,
+            e: orbit.e,
+            i: orbit.i,
+            diameterKm: (typeof orbit.size === 'number' ? orbit.size * 2 : undefined),
+            size: orbit.size,
+            velocity: orbit.velocity || asteroid.userData.velocity || null,
+            velocityKms: orbit.velocity || asteroid.userData.velocity || null,
+            severity: orbit.severity || asteroid.userData.severity || 'LOW',
+            source: asteroid.userData.source || 'api',
+            color: asteroid.userData.color,
+            // Puedes agregar más campos si los necesitas
           });
-          
-        } 
-      }
-    }
+        }
+      }
+    }
 
     renderer.domElement.addEventListener('mousedown', onMouseDown);
     renderer.domElement.addEventListener('mousemove', onMouseMove);
