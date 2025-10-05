@@ -258,7 +258,7 @@ const Asteroid3DViewer = () => {
     sunLight.position.copy(SUN_POSITION);
     scene.add(sunLight);
 
-    // Reorientar la luz direccional existente para que venga “desde” el Sol
+    // Reorientar la luz direccional existente para que venga "desde" el Sol
     directionalLight.position.copy(SUN_POSITION.clone().normalize().multiplyScalar(SUN_DISTANCE_SCENE));
     directionalLight.target.position.set(0, 0, 0); // que apunte al centro (Tierra)
     scene.add(directionalLight.target);
@@ -333,13 +333,11 @@ const Asteroid3DViewer = () => {
           // Obtener links únicos (self)
           const links = Array.from(new Set(neoList.map(n => n.links && n.links.self).filter(Boolean)));
 
-          // Descargas secuenciales (cantidad pequeña). Si fueran muchas, se puede limitar concurrencia.
-          const detailed = [];
-          for (const url of links) {
-            if (controller.signal.aborted) return;
+          // Descargas paralelas con Promise.all para máxima velocidad
+          const fetchPromises = links.map(async (url) => {
             try {
               const r = await fetch(url, { signal: controller.signal });
-              if (!r.ok) continue;
+              if (!r.ok) return null;
               const neo = await r.json();
               const orbital = neo.orbital_data || {};
               const kmData = neo.estimated_diameter?.kilometers;
@@ -348,7 +346,7 @@ const Asteroid3DViewer = () => {
               let avgDiameterKm;
               avgDiameterKm = (dMin + dMax) / 2; // promedio de diámetros
               const radiusKm = avgDiameterKm / 2;
-              const parsed = {
+              return {
                 name: neo.name || neo.designation || 'NEO',
                 a: parseFloat(orbital.semi_major_axis) || 1, // AU
                 e: parseFloat(orbital.eccentricity) || 0,
@@ -357,12 +355,14 @@ const Asteroid3DViewer = () => {
                 size: typeof radiusKm === 'number' ? radiusKm : 0.05,
                 color: randomColor()
               };
-              detailed.push(parsed);
             } catch (err) {
-              // Ignora errores individuales
-              // console.error('Error NEO individual', err);
+              return null;
             }
-          }
+          });
+
+          const results = await Promise.all(fetchPromises);
+          const detailed = results.filter(r => r !== null);
+          
           if (detailed.length) {
             addAsteroidsToScene(detailed);
           }
