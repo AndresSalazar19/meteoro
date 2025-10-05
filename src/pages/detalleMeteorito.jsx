@@ -3,13 +3,12 @@ import { Link, useParams } from "react-router-dom";
 import { GoogleGenerativeAI } from "@google/generative-ai";
 
 const GEMINI_API_KEY = "AIzaSyBipiiU3HACmSxboLPA1infuhXXicWjQUE"; // ⚠️ No dejar en cliente en prod
-const SYSTEM_TEXT = `Quiero darte datos clave sobre un meteorito. Con base exclusivamente en esos datos, genera dos secciones de salida: “CONSECUENCIAS” y “MITIGACIONES”. No agregues texto introductorio ni conclusiones fuera de esas secciones.
+const SYSTEM_TEXT = `
+Recibirás datos clave de un meteorito. A partir exclusivamente de esos datos, responde con dos secciones y en este orden: CONSECUENCIAS y MITIGACIONES. En cada sección escribe exactamente dos viñetas, con oraciones breves, claras y concisas, sin repetir los datos de entrada, sin advertencias legales ni comentarios meta, y sin agregar texto fuera de esas secciones.
 
-En “CONSECUENCIAS”, describe en menos de 3 viñetas los efectos más probables si: (a) impacta en tierra o en océano (por ejemplo, onda de choque, daños estructurales, incendios, tsunami, interrupciones de servicios), (b) explota en la atmósfera (por ejemplo, rotura de vidrios, onda de presión, irritación/afectación respiratoria por partículas finas), o (c) se desintegra sin efectos relevantes. Si, según los datos, el evento es irrelevante, indícalo claramente (“Sin consecuencias relevantes previstas”) y no inventes impactos.
+En CONSECUENCIAS, describe lo más probable según los datos: si impacta en tierra u océano (onda de choque, daños estructurales, incendios, tsunami, interrupciones de servicios), si explota en la atmósfera (rotura de vidrios, onda de presión, posibles molestias o afectaciones respiratorias por partículas finas), o si se desintegra con efectos irrelevantes. Cuando la información sea incierta o la probabilidad de impacto sea baja, usa lenguaje probabilístico (“probable”, “posible”, “poco probable”). Si los datos indican que el evento es irrelevante, deja claro que no se prevén efectos significativos.
 
-En “MITIGACIONES”, propone en menos de 3 viñetas acciones realistas y proporcionales al caso (por ejemplo, seguimiento y alertas tempranas, evacuaciones y cierres temporales en zonas de riesgo, desvío mediante impacto cinético o tracción gravitacional; considerar explosión controlada solo si el tamaño/composición/ventana temporal lo permiten). Si el caso es irrelevante, indica que no se requiere acción.
-
-Usa frases cortas, precisas y puntuales. No repitas datos de entrada. No incluyas advertencias legales ni comentarios meta. Si la información es incierta (p. ej., probabilidad de impacto baja), exprésalo con lenguaje probabilístico (“probable”, “posible”, “poco probable”).`;
+En MITIGACIONES, propone acciones realistas y proporcionales al caso: seguimiento y alertas tempranas, cierres o evacuaciones temporales en zonas de riesgo, desvío mediante impacto cinético o tracción gravitacional; considera opciones de explosión controlada solo si tamaño, composición y ventana temporal lo permiten. Si el evento es irrelevante según los datos, indica que no se requieren acciones. No uses texto en negrita ni formatos especiales; todo debe presentarse en texto plano y limitado a las dos viñetas por sección.`;
 
 export default function DetalleMeteorito() {
   const { id } = useParams();
@@ -130,26 +129,12 @@ export default function DetalleMeteorito() {
   // --- Hechos para Gemini (datos concisos y útiles) ---
   const buildFactsPrompt = () => {
     const lines = [
-      `Nombre: ${neo.name ?? "—"}`,
-      `ID: ${neo.id ?? "—"}`,
       `H: ${neo.absolute_magnitude_h ?? "—"}`,
       `Diametro_min_m: ${fmt(diamMinM, 0)}`,
       `Diametro_max_m: ${fmt(diamMaxM, 0)}`,
       `PHA: ${neo.is_potentially_hazardous_asteroid ? "Sí" : "No"}`,
       `Sentry: ${neo.is_sentry_object ? "Sí" : "No"}`,
       `MOID_AU: ${moid_AU != null ? fmt(moid_AU, 6) : "—"}`,
-      `Proxima_aproximacion_UTC: ${ca_when}`,
-      `Velocidad_km_s: ${v_kms != null ? fmt(v_kms, 3) : "—"}`,
-      `Distancia_min_km: ${miss_km != null ? fmtInt(miss_km) : "—"}`,
-      `a_AU: ${a_AU != null ? fmt(a_AU, 6) : "—"}`,
-      `e: ${e != null ? fmt(e, 6) : "—"}`,
-      `i_deg: ${i_deg != null ? fmt(i_deg, 3) : "—"}`,
-      `Periodo_dias: ${period_d != null ? fmt(period_d, 2) : "—"}`,
-      `Epoch_osculacion: ${epoch}`,
-      `Incertidumbre_U: ${U}`,
-      `Arco_datos_dias: ${dataArc}`,
-      `Observaciones_usadas: ${obsUsed}`,
-      `Clase_orbital: ${orbitClass}`,
     ];
     return lines.join("\n");
   };
