@@ -120,7 +120,6 @@ export default function DetalleMeteorito() {
   const U = od.orbit_uncertainty ?? "—";
   const dataArc = od.data_arc_in_days ?? "—";
   const obsUsed = od.observations_used ?? "—";
-  const moreInfoUrl = neo.nasa_jpl_url || neo.links?.self || null;
 
   const nextCA = nextEarthCA;
   const v_kms = toNum(nextCA?.relative_velocity?.kilometers_per_second);
@@ -175,119 +174,121 @@ export default function DetalleMeteorito() {
 
   return (
     <div className="flex w-full h-screen">
-      {/* Lateral */}
-      <div className="w-[10%] flex items-start justify-start m-4">
-        <Link
-          to="/listaMeteoritos"
-          className="mb-4 inline-block rounded-xl px-3 py-2 border border-white/20 hover:bg-white/10 transition"
-        >
-          ←
-        </Link>
-      </div>
+  {/* Lateral */}
+  <div className="w-[10%] flex items-start justify-start m-4">
+    <Link
+      to="/listaMeteoritos"
+      className="mb-4 inline-block rounded-xl px-3 py-2 border border-white/20 hover:bg-white/10 transition"
+    >
+      ←
+    </Link>
+  </div>
 
-      {/* Contenido */}
-      <div className="w-[90%] flex items-start justify-start">
-        <div>
-          <h1 className="text-3xl font-semibold text-white">{neo.name}</h1>
-          <p className="text-white/70">ID: {neo.id}</p>
+  {/* Contenido */}
+  <div className="w-[90%] flex items-start justify-start">
+    <div>
+<h1 className="text-3xl font-semibold text-white">{neo.name}</h1>
+<p className="text-white/70">ID: {neo.id}</p>
 
-          {moreInfoUrl && (
-            <div className="mt-2">
-              <a
-                href={moreInfoUrl}
-                target="_blank"
-                rel="noreferrer"
-                className="inline-block rounded-xl px-3 py-2 border border-white/20 hover:bg-white/10 transition text-white/90 text-sm"
-              >
-                Más información en Small-Body Database Lookup
-              </a>
-            </div>
-          )}
-          {/* Cards principales */}
-          <div className="mt-4 grid md:grid-cols-3 gap-4">
-            {/* Características */}
-            <div className="rounded-2xl border border-white/10 p-4">
-              <h2 className="text-white font-medium mb-2">Características</h2>
-              <ul className="text-white/80 text-sm space-y-1">
-                <li>Magnitud absoluta (H): {neo.absolute_magnitude_h ?? "—"}</li>
-                <li>Peligroso (PHA): {neo.is_potentially_hazardous_asteroid ? "Sí" : "No"}</li>
-                <li>Monitoreo (Sentry): {neo.is_sentry_object ? "Sí" : "No"}</li>
-                <li>
-                  Diámetro (km): {fmt(diamMinKm)} – {fmt(diamMaxKm)}
-                </li>
-                <li>MOID (AU): {moid_AU != null ? fmt(moid_AU, 6) : "—"}</li>
-              </ul>
-            </div>
+{neo.nasa_jpl_url && (
+  <div className="mt-3 rounded-2xl border border-white/10 p-3">
+    <span className="text-white/70 mr-2">Más info:</span>
+    <a
+      href={neo.nasa_jpl_url}
+      target="_blank"
+      rel="noreferrer"
+      className="text-white underline hover:text-yellow-300 cursor-pointer"
+      title="Ver ficha oficial en JPL SBDB"
+    >
+      Ver en JPL
+    </a>
+  </div>
+)}
 
-            {/* Órbita */}
-            <div className="rounded-2xl border border-white/10 p-4">
-              <h2 className="text-white font-medium mb-2">Órbita</h2>
-              <ul className="text-white/80 text-sm space-y-1">
-                <li>Clase: {orbitClass}</li>
-                <li>a (AU): {a_AU != null ? fmt(a_AU, 6) : "—"}</li>
-                <li>e: {e != null ? fmt(e, 6) : "—"}</li>
-                <li>i (°): {i_deg != null ? fmt(i_deg, 3) : "—"}</li>
-                <li>q (AU): {q_AU != null ? fmt(q_AU, 6) : "—"}</li>
-                <li>Q (AU): {Q_AU != null ? fmt(Q_AU, 6) : "—"}</li>
-                <li>Periodo (días): {period_d != null ? fmt(period_d, 2) : "—"}</li>
-                <li>Época: {epoch}</li>
-              </ul>
-            </div>
+      {/* GRID PRINCIPAL */}
+      <div className="mt-4 grid grid-cols-1 md:grid-cols-2 gap-4">
+        {/* 1️⃣ Características */}
+        <div className="rounded-2xl border border-white/10 p-4">
+          <h2 className="text-white font-medium mb-2">Características</h2>
+          <ul className="text-white/80 text-sm space-y-1">
+            <li>Magnitud absoluta (H): {neo.absolute_magnitude_h ?? "—"}</li>
+            <li>Peligroso (PHA): {neo.is_potentially_hazardous_asteroid ? "Sí" : "No"}</li>
+            <li>Monitoreo (Sentry): {neo.is_sentry_object ? "Sí" : "No"}</li>
+            <li>Diámetro (km): {fmt(diamMinKm)} – {fmt(diamMaxKm)}</li>
+            <li>MOID (AU): {moid_AU != null ? fmt(moid_AU, 6) : "—"}</li>
+          </ul>
+        </div>
 
-            {/* Calidad de solución */}
-            <div className="rounded-2xl border border-white/10 p-4">
-              <h2 className="text-white font-medium mb-2">Calidad orbital</h2>
-              <ul className="text-white/80 text-sm space-y-1">
-                <li>Incertidumbre U: {U}</li>
-                <li>Arco de datos (días): {dataArc}</li>
-                <li>Observaciones usadas: {obsUsed}</li>
-              </ul>
-            </div>
-          </div>
-
-          {/* Próxima aproximación a la Tierra */}
-          <div className="mt-4 rounded-2xl border border-white/10 p-4">
-            <h2 className="text-white font-medium mb-2">
-              Próxima aproximación a la Tierra
-            </h2>
-            {nextCA ? (
-              <ul className="text-white/80 text-sm space-y-1">
-                <li>Fecha/hora (UTC): {ca_when}</li>
-                <li>Velocidad (km/s): {v_kms != null ? fmt(v_kms, 3) : "—"}</li>
-                <li>Distancia mínima (km): {miss_km != null ? fmtInt(miss_km) : "—"}</li>
-                <li>Cuerpo: {nextCA.orbiting_body}</li>
-              </ul>
-            ) : (
-              <p className="text-white/70 text-sm">
-                No hay registros de aproximaciones a la Tierra.
-              </p>
-            )}
-          </div>
-
-          {/* Gemini */}
-<button
-  onClick={handleGenerarConsecuencias}
-  disabled={aiLoading}
-  className="rounded-xl px-4 py-2 
-             border border-white/20 
-             bg-white text-black 
-             hover:bg-yellow-400 hover:border-yellow-400 
-             active:bg-yellow-500
-             cursor-pointer transition-colors duration-200
-             disabled:opacity-50 disabled:cursor-not-allowed"
-  title="Calcula consecuencias y posibles mitigaciones"
->
-  {aiLoading ? "Generando…" : "Calcula consecuencias y posibles mitigaciones"}
-</button>
-
-          {/* Resultado IA */}
-          {aiOutput && (
-            <div className="mt-4 rounded-2xl border border-white/10 p-4 bg-black/30">
-              <pre className="text-white/90 text-sm whitespace-pre-wrap">{aiOutput}</pre>
-            </div>
+        {/* 2️⃣ Próxima aproximación a la Tierra */}
+        <div className="rounded-2xl border border-white/10 p-4">
+          <h2 className="text-white font-medium mb-2">
+            Próxima aproximación a la Tierra
+          </h2>
+          {nextCA ? (
+            <ul className="text-white/80 text-sm space-y-1">
+              <li>Fecha/hora (UTC): {ca_when}</li>
+              <li>Velocidad (km/s): {v_kms != null ? fmt(v_kms, 3) : "—"}</li>
+              <li>Distancia mínima (km): {miss_km != null ? fmtInt(miss_km) : "—"}</li>
+              <li>Cuerpo: {nextCA.orbiting_body}</li>
+            </ul>
+          ) : (
+            <p className="text-white/70 text-sm">
+              No hay registros de aproximaciones a la Tierra.
+            </p>
           )}
         </div>
+
+        {/* 3️⃣ Órbita */}
+        <div className="rounded-2xl border border-white/10 p-4">
+          <h2 className="text-white font-medium mb-2">Órbita</h2>
+          <ul className="text-white/80 text-sm space-y-1">
+            <li>Clase: {orbitClass}</li>
+            <li>a (AU): {a_AU != null ? fmt(a_AU, 6) : "—"}</li>
+            <li>e: {e != null ? fmt(e, 6) : "—"}</li>
+            <li>i (°): {i_deg != null ? fmt(i_deg, 3) : "—"}</li>
+            <li>q (AU): {q_AU != null ? fmt(q_AU, 6) : "—"}</li>
+            <li>Q (AU): {Q_AU != null ? fmt(Q_AU, 6) : "—"}</li>
+            <li>Periodo (días): {period_d != null ? fmt(period_d, 2) : "—"}</li>
+            <li>Época: {epoch}</li>
+          </ul>
+        </div>
+
+        {/* 4️⃣ Calidad orbital */}
+        <div className="rounded-2xl border border-white/10 p-4">
+          <h2 className="text-white font-medium mb-2">Calidad orbital</h2>
+          <ul className="text-white/80 text-sm space-y-1">
+            <li>Incertidumbre U: {U}</li>
+            <li>Arco de datos (días): {dataArc}</li>
+            <li>Observaciones usadas: {obsUsed}</li>
+          </ul>
+        </div>
       </div>
+
+      {/* Gemini */}
+      <button
+        onClick={handleGenerarConsecuencias}
+        disabled={aiLoading}
+        className="mt-4 rounded-xl px-4 py-2 
+                   border border-white/20 
+                   bg-white text-black 
+                   hover:bg-yellow-400 hover:border-yellow-400 
+                   active:bg-yellow-500
+                   cursor-pointer transition-colors duration-200
+                   disabled:opacity-50 disabled:cursor-not-allowed"
+        title="Calcula consecuencias y posibles mitigaciones"
+      >
+        {aiLoading ? "Generando…" : "Calcula consecuencias y posibles mitigaciones"}
+      </button>
+
+      {/* Resultado IA */}
+      {aiOutput && (
+        <div className="mt-4 rounded-2xl border border-white/10 p-4 bg-black/30">
+          <pre className="text-white/90 text-sm whitespace-pre-wrap">{aiOutput}</pre>
+        </div>
+      )}
     </div>
+  </div>
+</div>
+
   );
 }
