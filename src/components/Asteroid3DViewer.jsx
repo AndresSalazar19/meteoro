@@ -9,7 +9,7 @@ import PlayCircleIcon from '@mui/icons-material/PlayCircle';
 
 import * as THREE from 'three';
 
-const Asteroid3DViewer = () => {
+function Asteroid3DViewer({ onAsteroidsLoaded, onAsteroidSimulated, asteroids = [], viewMode = 'all', filterTerm = '' }) {
   const mountRef = useRef(null);
   const cameraRef = useRef(null);
   const earthRef = useRef(null);
@@ -30,6 +30,74 @@ const Asteroid3DViewer = () => {
   const [isSimulated, setIsSimulated] = useState(false);
   const [isPaused, setIsPaused] = useState(false);
 
+  // Scene-wide constants available to both the mount effect and prop-change effect
+  const R_EARTH_SCENE = 63.78;
+  const EARTH_ORBIT_IN_EARTH_RADII = 50;
+  const ORBIT_SCALE = R_EARTH_SCENE * EARTH_ORBIT_IN_EARTH_RADII;
+  const MIN_ASTEROID_RADIUS_KM = 0.05;
+  const ASTEROID_UNIFORM_SCALE = 100;
+  const MAX_SCENE_RADIUS = R_EARTH_SCENE * 0.6;
+
+  // Refs to objects created inside the mount effect so other effects can access them
+  const sceneRef = useRef(null);
+  const orbitGroupRef = useRef(null);
+
+  // Helper to add asteroid data into the scene; safe to call from any effect after mount
+  const addAsteroidsToScene = (dataList) => {
+    if (!sceneRef.current || !orbitGroupRef.current) return;
+    const orbitGroup = orbitGroupRef.current;
+    dataList.forEach((data) => {
+      try {
+        const scaledA = data.a * ORBIT_SCALE;
+        const orbitPoints = [];
+        const segments = 128;
+        for (let j = 0; j <= segments; j++) {
+          const theta = (j / segments) * Math.PI * 2;
+          const r = (scaledA * (1 - data.e * data.e)) / (1 + data.e * Math.cos(theta));
+          const x = r * Math.cos(theta);
+          const z = r * Math.sin(theta);
+          const y = z * Math.sin(data.i * Math.PI / 180);
+          const zAdjusted = z * Math.cos(data.i * Math.PI / 180);
+          orbitPoints.push(new THREE.Vector3(x, y, zAdjusted));
+        }
+
+        const orbitGeometry = new THREE.BufferGeometry().setFromPoints(orbitPoints);
+        const orbitMaterial = new THREE.LineBasicMaterial({
+          color: data.color,
+          transparent: true,
+          opacity: 0.4
+        });
+        const orbitLine = new THREE.Line(orbitGeometry, orbitMaterial);
+        orbitLine.userData = { name: data.name };
+        orbitGroup.add(orbitLine);
+
+        let physicalRadiusKm = Math.max(data.size, MIN_ASTEROID_RADIUS_KM);
+        let radiusScene = physicalRadiusKm * ASTEROID_UNIFORM_SCALE;
+        if (radiusScene > MAX_SCENE_RADIUS) radiusScene = MAX_SCENE_RADIUS;
+
+        const asteroidGeometry = new THREE.SphereGeometry(radiusScene, 16, 16);
+        const asteroidMaterial = new THREE.MeshPhongMaterial({
+          color: data.color,
+          shininess: 5
+        });
+        const asteroid = new THREE.Mesh(asteroidGeometry, asteroidMaterial);
+        asteroid.userData = {
+          name: data.name,
+          type: 'asteroid',
+          orbit: data,
+          orbitPoints,
+          orbitLine,
+          currentIndex: 0
+        };
+        asteroid.position.copy(orbitPoints[0]);
+        sceneRef.current.add(asteroid);
+        asteroidMeshesRef.current.push(asteroid);
+      } catch (e) {
+        console.warn('Error adding asteroid to scene', e);
+      }
+    });
+  };
+
   const onAsteroidClick = (asteroid) => {
     if (!asteroid) {
       console.log('Asteroide no encontrado');
@@ -41,6 +109,19 @@ const Asteroid3DViewer = () => {
     // Se ignora el estado de pausa al simular
     setIsPaused(false);
     setIsSimulated(true);
+
+
+       if (onAsteroidSimulated) {
+      onAsteroidSimulated({
+        name: asteroid.userData.name,
+        a: asteroid.userData.orbit.a,
+        e: asteroid.userData.orbit.e,
+        i: asteroid.userData.orbit.i,
+        diameterKm: asteroid.userData.orbit.size * 2,
+        velocityKms: asteroid.userData.orbit.velocity || null,
+        severity: asteroid.userData.orbit.severity || 'LOW'
+      });
+    }
 
     // Dirección desde el asteroide hacia el objetivo (origen)
     const directionToOrigin = new THREE.Vector3().subVectors(new THREE.Vector3(0,0,0), asteroid.position).normalize();
@@ -124,15 +205,11 @@ const Asteroid3DViewer = () => {
     if (!mount) return;
 
     const scene = new THREE.Scene();
+    sceneRef.current = scene;
     const earthSystem = new THREE.Group();
     scene.add(earthSystem);
     
-    const R_EARTH_SCENE = 63.78;
-    const EARTH_ORBIT_IN_EARTH_RADII = 50;
-    const ORBIT_SCALE = R_EARTH_SCENE * EARTH_ORBIT_IN_EARTH_RADII;
-    const MIN_ASTEROID_RADIUS_KM = 0.05;
-    const ASTEROID_UNIFORM_SCALE = 100;
-    const MAX_SCENE_RADIUS = R_EARTH_SCENE * 0.6;
+  // (constants are defined in component scope)
 
     let cameraDistance = 1000;
     cameraRef.current = new THREE.PerspectiveCamera(75, mount.clientWidth / mount.clientHeight, 0.1, 20000);
@@ -193,7 +270,8 @@ const Asteroid3DViewer = () => {
     earthSystem.add(atmosphere);
 
     const orbitGroup = new THREE.Group();
-    scene.add(orbitGroup);
+  scene.add(orbitGroup);
+  orbitGroupRef.current = orbitGroup;
 
     const moonRadius = R_EARTH_SCENE * 0.27;
     const moonDistance = R_EARTH_SCENE * 10;
@@ -246,117 +324,85 @@ const Asteroid3DViewer = () => {
 
     const randomColor = () => Math.floor(Math.random() * 0xffffff);
 
-    const addAsteroidsToScene = (dataList) => {
-      dataList.forEach((data) => {
-        const scaledA = data.a * ORBIT_SCALE;
-        const orbitPoints = [];
-        const segments = 128;
-        
-        for (let j = 0; j <= segments; j++) {
-          const theta = (j / segments) * Math.PI * 2;
-          const r = (scaledA * (1 - data.e * data.e)) / (1 + data.e * Math.cos(theta));
-          const x = r * Math.cos(theta);
-          const z = r * Math.sin(theta);
-          const y = z * Math.sin(data.i * Math.PI / 180);
-          const zAdjusted = z * Math.cos(data.i * Math.PI / 180);
-          orbitPoints.push(new THREE.Vector3(x, y, zAdjusted));
-        }
-        
-        const orbitGeometry = new THREE.BufferGeometry().setFromPoints(orbitPoints);
-        const orbitMaterial = new THREE.LineBasicMaterial({
-          color: data.color,
-          transparent: true,
-          opacity: 0.4
-        });
-        const orbitLine = new THREE.Line(orbitGeometry, orbitMaterial);
-        orbitGroup.add(orbitLine);
-
-        let physicalRadiusKm = Math.max(data.size, MIN_ASTEROID_RADIUS_KM);
-        let radiusScene = physicalRadiusKm * ASTEROID_UNIFORM_SCALE;
-        if (radiusScene > MAX_SCENE_RADIUS) radiusScene = MAX_SCENE_RADIUS;
-        
-        const asteroidGeometry = new THREE.SphereGeometry(radiusScene, 16, 16);
-        const asteroidMaterial = new THREE.MeshPhongMaterial({
-          color: data.color,
-          shininess: 5
-        });
-        const asteroid = new THREE.Mesh(asteroidGeometry, asteroidMaterial);
-        asteroid.userData = {
-          name: data.name,
-          type: 'asteroid',
-          orbit: data,
-          orbitPoints,
-          currentIndex: 0
-        };
-        asteroid.position.copy(orbitPoints[0]);
-        scene.add(asteroid);
-        asteroidMeshesRef.current.push(asteroid);
-      });
-    };
+  // use the outer addAsteroidsToScene defined in component scope
 
     const controller = new AbortController();
     const API_KEY = import.meta.env.VITE_NASA_API_KEY || '2KzpzDksQWT2D2csD9Ja9wrdX8ruTcS290hH2mBK';
     const FEED_URL = `https://api.nasa.gov/neo/rest/v1/feed?start_date=2025-12-19&end_date=2025-12-26&api_key=${API_KEY}`;
 
-    const fetchAsteroids = async () => {
-      try {
-        const res = await fetch(FEED_URL, { signal: controller.signal });
-        if (!res.ok) throw new Error('Error al obtener feed NEO');
-        const feed = await res.json();
-        const byDate = feed.near_earth_objects || {};
-        const neoList = [];
-        Object.values(byDate).forEach((arr) => {
-          if (Array.isArray(arr)) neoList.push(...arr);
-        });
-        
-        // CORRECCIÓN: Forzar HTTPS en todos los links
-        const links = Array.from(
-          new Set(
-            neoList
-              .map(n => n.links?.self)
-              .filter(Boolean)
-              .map(url => url.replace('http://', 'https://'))
-          )
-        );
+  const fetchAsteroids = async () => {
+    try {
+      const res = await fetch(FEED_URL, { signal: controller.signal });
+      if (!res.ok) throw new Error('Error al obtener feed NEO');
+      const feed = await res.json();
+      const byDate = feed.near_earth_objects || {};
+      const neoList = [];
+      Object.values(byDate).forEach((arr) => {
+        if (Array.isArray(arr)) neoList.push(...arr);
+      });
+      
+      const links = Array.from(
+        new Set(
+          neoList
+            .map(n => n.links?.self)
+            .filter(Boolean)
+            .map(url => url.replace('http://', 'https://'))
+        )
+      );
 
-        const fetchPromises = links.map(async (url) => {
-          try {
-            const r = await fetch(url, { signal: controller.signal });
-            if (!r.ok) return null;
-            const neo = await r.json();
-            const orbital = neo.orbital_data || {};
-            const kmData = neo.estimated_diameter?.kilometers;
-            const dMin = kmData?.estimated_diameter_min;
-            const dMax = kmData?.estimated_diameter_max;
-            const avgDiameterKm = (dMin + dMax) / 2;
-            const radiusKm = avgDiameterKm / 2;
-            return {
-              name: neo.name || neo.designation || 'NEO',
-              a: parseFloat(orbital.semi_major_axis) || 1,
-              e: parseFloat(orbital.eccentricity) || 0,
-              i: parseFloat(orbital.inclination) || 0,
-              size: typeof radiusKm === 'number' ? radiusKm : 0.05,
-              color: randomColor()
-            };
-          } catch {
-            return null;
-          }
-        });
+      const fetchPromises = links.map(async (url) => {
+        try {
+          const r = await fetch(url, { signal: controller.signal });
+          if (!r.ok) return null;
+          const neo = await r.json();
+          const orbital = neo.orbital_data || {};
+          const kmData = neo.estimated_diameter?.kilometers;
+          const dMin = kmData?.estimated_diameter_min;
+          const dMax = kmData?.estimated_diameter_max;
+          const avgDiameterKm = (dMin + dMax) / 2;
+          const radiusKm = avgDiameterKm / 2;
+          
+          // Calcular velocidad aproximada (puedes ajustar esto)
+          const velocity = parseFloat(orbital.orbital_period) 
+            ? (2 * Math.PI * parseFloat(orbital.semi_major_axis) * 149597870.7) / 
+              (parseFloat(orbital.orbital_period) * 365.25 * 86400)
+            : null;
 
-        const results = await Promise.all(fetchPromises);
-        const detailed = results.filter(r => r !== null);
-        
-        if (detailed.length) {
-          addAsteroidsToScene(detailed);
+          return {
+            name: neo.name || neo.designation || 'NEO',
+            a: parseFloat(orbital.semi_major_axis) || 1,
+            e: parseFloat(orbital.eccentricity) || 0,
+            i: parseFloat(orbital.inclination) || 0,
+            size: typeof radiusKm === 'number' ? radiusKm : 0.05,
+            velocity: velocity,
+            color: randomColor(),
+            source: 'api',
+            severity: neo.is_potentially_hazardous_asteroid ? 'HIGH' : 'LOW'
+          };
+        } catch {
+          return null;
         }
-      } catch (e) {
-        if (e.name !== 'AbortError') {
-          console.error('Error obteniendo asteroides:', e);
+      });
+
+      const results = await Promise.all(fetchPromises);
+      const detailed = results.filter(r => r !== null);
+      
+      if (detailed.length) {
+        addAsteroidsToScene(detailed);
+        
+        // Notificar al padre con la lista completa de asteroides
+        if (onAsteroidsLoaded) {
+          onAsteroidsLoaded(detailed);
         }
       }
-    };
+    } catch (e) {
+      if (e.name !== 'AbortError') {
+        console.error('Error obteniendo asteroides:', e);
+      }
+    }
+  };
 
-    fetchAsteroids();
+  fetchAsteroids();
 
     const starsGeometry = new THREE.BufferGeometry();
     const starsMaterial = new THREE.PointsMaterial({ 
@@ -521,6 +567,48 @@ const Asteroid3DViewer = () => {
       }
     };
   }, []);
+
+  // When the `asteroids` prop changes (manual additions), add any new entries to the scene
+  React.useEffect(() => {
+    try {
+      if (!asteroids || !asteroids.length) return;
+
+      // Ensure the scene has been initialized
+      if (!sceneRef.current) return;
+
+      // Find which asteroid names are already present in the scene
+      const existingNames = new Set(asteroidMeshesRef.current.map(m => m.userData?.name));
+      const toAdd = asteroids.filter(a => !existingNames.has(a.name));
+      if (toAdd.length === 0) return;
+
+      // Add the missing asteroids into the scene
+      addAsteroidsToScene(toAdd);
+      // Optionally notify parent about API asteroids
+      if (onAsteroidsLoaded) onAsteroidsLoaded(asteroids.filter(a => a.source === 'api'));
+    } catch (e) {
+      console.warn('Error processing asteroids prop', e);
+    }
+  }, [asteroids]);
+
+  // Effect: respond to viewMode / filterTerm changes by toggling visibility
+  React.useEffect(() => {
+    try {
+      const term = (filterTerm || '').toLowerCase();
+      asteroidMeshesRef.current.forEach(mesh => {
+        const data = mesh.userData?.orbit || {};
+        const name = (mesh.userData?.name || '').toLowerCase();
+        const source = data.source || 'api';
+        const matchesView = viewMode === 'all' || viewMode === source;
+        const matchesFilter = !term || name.includes(term);
+        const visible = matchesView && matchesFilter;
+        mesh.visible = visible;
+        if (mesh.userData?.orbitLine) mesh.userData.orbitLine.visible = visible;
+      });
+    } catch (e) {
+      // silence any errors during live updates
+      console.warn('Error applying asteroid visibility filter', e);
+    }
+  }, [viewMode, filterTerm, asteroids]);
  
   return (
     <>
