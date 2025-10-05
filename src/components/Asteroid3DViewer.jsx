@@ -18,7 +18,7 @@ function Asteroid3DViewer({ onAsteroidsLoaded, onAsteroidSimulated, asteroids = 
   const raycaster = new THREE.Raycaster();
   const mouse = new THREE.Vector2();
     // Fog sphere (versión inicial) y nuevo sistema de humo basado en sprites
-  const fogRef = useRef(null); // (Opcional) esfera suave
+  const fogSphereRef = useRef(null); // (Opcional) esfera suave
   const fogStateRef = useRef({ active: false, progress: 0, duration: 180, maxOpacity: 0.45 });
   // Grupo de sprites de humo
   const smokeGroupRef = useRef(null);
@@ -26,6 +26,7 @@ function Asteroid3DViewer({ onAsteroidsLoaded, onAsteroidSimulated, asteroids = 
   // Materiales de la Tierra (original / impactado)
   const earthOriginalMaterialRef = useRef(null);
   const earthImpactedMaterialRef = useRef(null);
+  const earthOriginalEmissiveRef = useRef({ color: null, intensity: null });
   const cameraTransitionRef = useRef({ 
     active: false,
     fromPos: new THREE.Vector3(),
@@ -44,6 +45,52 @@ function Asteroid3DViewer({ onAsteroidsLoaded, onAsteroidSimulated, asteroids = 
   const shockwavesRef = useRef([]); // almacena ondas expansivas activas
   const originalEarthColorRef = useRef(null); // para restaurar color original
   const fogRef = useRef(null); // referencia a la neblina añadida
+  const impactEffectAppliedRef = useRef(false); // evita aplicar efecto doble
+
+  // ========= Lógica de energía y nivel de peligro (replicada de SimulationOverlay) =========
+  const DEFAULT_DENSITY = 3000; // kg/m^3
+  const computeEnergyMt = (radiusKm, velocityKmS, density = DEFAULT_DENSITY) => {
+    if (!Number.isFinite(radiusKm) || radiusKm <= 0 || !Number.isFinite(velocityKmS) || velocityKmS <= 0) return 0;
+    const r_m = radiusKm * 1000;
+    const v_ms = velocityKmS * 1000;
+    const volume_m3 = (4 / 3) * Math.PI * Math.pow(r_m, 3);
+    const mass_kg = density * volume_m3;
+    const energyJ = 0.5 * mass_kg * Math.pow(v_ms, 2);
+    return energyJ / 4.184e15; // Megatones
+  };
+  const severityFromEnergyMt = (energyMt) => {
+    if (energyMt >= 1000) return { key: "E3_CATASTROPHIC", label: "Catastrófica" };
+    if (energyMt >= 10)   return { key: "E2_SEVERE",       label: "Severa" };
+    if (energyMt >= 0.1)  return { key: "E1_SIGNIFICANT",  label: "Significativa" };
+    return { key: "E0_MINI", label: "Mínima" };
+  };
+  const combineDangerLevelLocal = (severityFlag, energyClassKey) => {
+    const isPHA = severityFlag === 'HIGH';
+    if (energyClassKey === 'E3_CATASTROPHIC') return { nivel: 'Extremo',  desc: 'Impacto con efectos globales' };
+    if (energyClassKey === 'E2_SEVERE')       return { nivel: isPHA ? 'Alto' : 'Moderado', desc: isPHA ? 'Riesgo regional severo' : 'Riesgo regional relevante' };
+    if (energyClassKey === 'E1_SIGNIFICANT')  return { nivel: isPHA ? 'Moderado' : 'Bajo',  desc: isPHA ? 'Daños de ciudad probables' : 'Daños de ciudad posibles' };
+    return { nivel: 'Bajo', desc: 'Airburst/daños locales menores' };
+  };
+  const decideImpactEffect = (asteroid) => {
+    if (!asteroid) return;
+    const radiusKm = asteroid.userData?.orbit?.size || asteroid.userData?.size || 0; // size es radio
+    const velocityKmS = asteroid.userData?.orbit?.velocity || asteroid.userData?.velocity || 0;
+    const energyMt = computeEnergyMt(radiusKm, velocityKmS);
+    const eClass = severityFromEnergyMt(energyMt);
+    const danger = combineDangerLevelLocal(asteroid.userData?.orbit?.severity || asteroid.userData?.severity || 'LOW', eClass.key);
+    const nivel = danger.nivel;
+    // Mapeo solicitado:
+    // Bajo -> primerImpacto
+    // Moderado -> segundoImpacto
+    // Alto / Extremo -> tercer impacto
+    if (nivel === 'Bajo') {
+      primerImpacto();
+    } else if (nivel === 'Moderado') {
+      segundoImpacto();
+    } else { // 'Alto' o 'Extremo'
+      tercer_Impacto();
+    }
+  };
 
   // Scene-wide constants available to both the mount effect and prop-change effect
   const R_EARTH_SCENE = 63.78;
@@ -183,40 +230,81 @@ function Asteroid3DViewer({ onAsteroidsLoaded, onAsteroidSimulated, asteroids = 
   };
 
   const reiniciar = () => {
-    simulationModeRef.current = "orbit";
+    simulationModeRef.current = 'orbit';
     earthRotationRef.current = true;
     moonRotationRef.current = true;
+    impactEffectAppliedRef.current = false;
 
+    // Reset asteroides
     asteroidMeshesRef.current.forEach(ast => {
       if (ast.userData.impactPath) {
         ast.userData.isImpacting = false;
         ast.userData.impactPath = null;
         ast.userData.trail?.line?.parent?.remove(ast.userData.trail.line);
         ast.userData.trail = null;
-        ast.position.copy(ast.userData.orbitPoints[0]);
       }
+      // Regresar a primer punto orbital
+      if (ast.userData.orbitPoints && ast.userData.orbitPoints.length) {
+        ast.position.copy(ast.userData.orbitPoints[0]);
+        ast.userData.currentIndex = 0;
+      }
+      ast.material.emissive?.setHex?.(0x000000);
     });
-    threatAsteroidRef.current = null;
-    // Restaurar material original de la Tierra
+
+    selectedAsteroidRef.current = null;
+
+    // Restaurar material original (textura Tierra)
     if (earthOriginalMaterialRef.current && earthRef.current) {
       earthRef.current.material = earthOriginalMaterialRef.current;
       earthRef.current.material.needsUpdate = true;
+    } else if (earthRef.current?.material?.color && originalEarthColorRef.current) {
+      earthRef.current.material.color.copy(originalEarthColorRef.current);
     }
-    // Apagar humo
+    // Restaurar emisivo si fue alterado
+    if (earthRef.current?.material && earthOriginalEmissiveRef.current.color) {
+      const mat = earthRef.current.material;
+      if (mat.emissive) {
+        mat.emissive.copy(earthOriginalEmissiveRef.current.color);
+        if (earthOriginalEmissiveRef.current.intensity !== null) {
+          mat.emissiveIntensity = earthOriginalEmissiveRef.current.intensity;
+        }
+      }
+    }
+
+    // Quitar fog global (scene.fog)
+    if (sceneRef.current) {
+      sceneRef.current.fog = null;
+    }
+    fogRef.current = null;
+
+    // Apagar humo sprites
     smokeStateRef.current.active = false;
     if (smokeGroupRef.current) {
       smokeGroupRef.current.visible = false;
-      smokeGroupRef.current.children.forEach(sp => sp.material.opacity = 0);
+      smokeGroupRef.current.children.forEach(sp => { sp.material.opacity = 0; });
     }
-    // Apagar fog sphere
+
+    // Apagar fog sphere animada
     fogStateRef.current.active = false;
-    if (fogRef.current) {
-      fogRef.current.visible = false;
-      fogRef.current.material.opacity = 0;
+    if (fogSphereRef.current) {
+      fogSphereRef.current.visible = false;
+      fogSphereRef.current.material.opacity = 0;
     }
+
+    // Eliminar ondas expansivas pendientes
+    shockwavesRef.current.forEach(sw => {
+      if (sw.mesh) {
+        sceneRef.current?.remove(sw.mesh);
+        sw.mesh.geometry?.dispose();
+        sw.mesh.material?.dispose();
+      }
+    });
+    shockwavesRef.current = { current: [] }; // forzar limpieza (o usar length=0 si fuera array directo)
+    shockwavesRef.current = [];
+
     setIsSimulated(false);
-    setIsPaused(false);
-  }
+    setIsPaused(false); // mostrará botón Pausar nuevamente
+  };
 
   /**
    * Crea una pequeña onda expansiva (primer impacto) alrededor de la Tierra.
@@ -228,34 +316,28 @@ function Asteroid3DViewer({ onAsteroidsLoaded, onAsteroidSimulated, asteroids = 
       color: 0xffffff,
       duracion: 2500,
       escalaFinal: 3.5,
-      opacidadInicial: 0.9
+      opacidadInicial: 0.9,
+      thicknessFactor: 1
     });
   };
 
   /**
-   * Segundo impacto: agrega neblina ligera y tiñe el planeta a un naranja tenue.
-   * También genera una onda expansiva algo mayor para dar continuidad visual.
+   * Segundo impacto: muestra neblina naranja alrededor de la Tierra (fog sphere) sin cambiar su color
+   * y SIN onda expansiva.
    */
   const segundoImpacto = () => {
     if (!sceneRef.current || !earthRef.current) return;
-    // Guardar color original sólo la primera vez
-    const earthMat = earthRef.current.material;
-    if (!originalEarthColorRef.current) {
-      originalEarthColorRef.current = earthMat.color.clone();
+    if (fogSphereRef.current) {
+      fogSphereRef.current.visible = true;
+      // Color naranja translúcido
+      fogSphereRef.current.material.color.set(0xff6a00);
+      fogSphereRef.current.material.opacity = 0; // comenzará desde 0
+      fogStateRef.current.active = true;
+      fogStateRef.current.progress = 0;
+      // Ajustar duración y opacidad máxima para este caso
+      fogStateRef.current.duration = 220; // frames aproximados (ligeramente más larga)
+      fogStateRef.current.maxOpacity = 0.5; // un poco más densa que la default 0.45
     }
-    // Tinte naranja tenue (mezcla hacia #ffb066 sin perder completamente la textura)
-    earthMat.color.lerp(new THREE.Color(0xffb066), 0.35);
-    // Añadir neblina si no existe
-    if (!fogRef.current) {
-      fogRef.current = new THREE.FogExp2(0xffa960, 0.0009); // densidad baja
-      sceneRef.current.fog = fogRef.current;
-    }
-    crearOndaExpansiva({
-      color: 0xffc27a,
-      duracion: 3200,
-      escalaFinal: 4.2,
-      opacidadInicial: 0.85
-    });
   };
 
   /**
@@ -272,12 +354,15 @@ function Asteroid3DViewer({ onAsteroidsLoaded, onAsteroidSimulated, asteroids = 
       color = 0xffffff,
       duracion = 2000,
       escalaFinal = 3,
-      opacidadInicial = 1
+      opacidadInicial = 1,
+      thicknessFactor = 1
     } = cfg;
 
+    // Grosor base: 0.005 * R_EARTH_SCENE (como configuración original). Se escala por thicknessFactor.
     const innerR = R_EARTH_SCENE * 1.01;
-    const outerR = R_EARTH_SCENE * 1.015;
-    const ringGeo = new THREE.RingGeometry(innerR, outerR, 72);
+    const ringThickness = R_EARTH_SCENE * 0.005 * thicknessFactor;
+    const outerR = innerR + ringThickness;
+    const ringGeo = new THREE.RingGeometry(innerR, outerR, 96);
     // Material con blending aditivo para efecto luminoso suave
     const ringMat = new THREE.MeshBasicMaterial({
       color,
@@ -316,10 +401,35 @@ function Asteroid3DViewer({ onAsteroidsLoaded, onAsteroidSimulated, asteroids = 
 
   // Función caso 3
   const tercer_Impacto = () => {
-    // Cambio de material de la Tierra
-    if (earthRef.current && earthImpactedMaterialRef.current) {
-      earthRef.current.material = earthImpactedMaterialRef.current;
-      earthRef.current.material.needsUpdate = true;
+    // Forzar cambio de textura de la Tierra a 2k_makemake_fictional.jpg
+    if (earthRef.current) {
+      const loader = new THREE.TextureLoader();
+      const aplicarMaterialImpacto = (mapa) => {
+        const nuevoMat = new THREE.MeshPhongMaterial({
+          map: mapa,
+          emissive: 0x441100,
+          emissiveIntensity: 0.8,
+          specular: 0x111111,
+          shininess: 6
+        });
+        earthRef.current.material = nuevoMat;
+        earthRef.current.material.needsUpdate = true;
+      };
+      if (earthImpactedMaterialRef.current) {
+        // Ya teníamos un material precargado
+        earthRef.current.material = earthImpactedMaterialRef.current;
+        earthRef.current.material.needsUpdate = true;
+      } else {
+        loader.load(
+          '/2k_makemake_fictional.jpg',
+          (tex) => {
+            aplicarMaterialImpacto(tex);
+            earthImpactedMaterialRef.current = earthRef.current.material;
+          },
+          undefined,
+          () => { /* fallo al cargar textura de impacto: se ignora y se mantiene material original */ }
+        );
+      }
     }
 
     // Activar humo principal
@@ -337,10 +447,12 @@ function Asteroid3DViewer({ onAsteroidsLoaded, onAsteroidSimulated, asteroids = 
       // Fallback a esfera difusa
       fogStateRef.current.active = true;
       fogStateRef.current.progress = 0;
-      fogRef.current.visible = true;
-      fogRef.current.material.opacity = 0;
+  fogSphereRef.current.visible = true;
+  fogSphereRef.current.material.opacity = 0;
     }
   };
+  // Alias sin guion bajo por si se requiere coherencia con naming solicitado
+  const tercerImpacto = () => tercer_Impacto();
 
   useEffect(() => {
     const mount = mountRef.current;
@@ -804,10 +916,12 @@ function Asteroid3DViewer({ onAsteroidsLoaded, onAsteroidSimulated, asteroids = 
         } else if (path && path.progress >= 1 && !path.impactDone) {
           console.log('¡IMPACTO!');
           path.impactDone = true;
-          simulationModeRef.current = "orbit";
-          earthRotationRef.current = false;
-          // Llamar a la función de tercer impacto
-          tercer_Impacto();
+          simulationModeRef.current = 'orbit';
+          earthRotationRef.current = true; // mantener rotación tras impacto
+          if (!impactEffectAppliedRef.current) {
+            decideImpactEffect(threat);
+            impactEffectAppliedRef.current = true;
+          }
         }
       }
 
@@ -863,7 +977,7 @@ function Asteroid3DViewer({ onAsteroidsLoaded, onAsteroidSimulated, asteroids = 
       }
         
       // Animación de esfera de fog (solo si se activa explícitamente)
-      if (fogStateRef.current.active && fogRef.current) {
+      if (fogStateRef.current.active && fogSphereRef.current) {
         const f = fogStateRef.current;
         f.progress++;
         const half = f.duration / 2;
@@ -873,9 +987,9 @@ function Asteroid3DViewer({ onAsteroidsLoaded, onAsteroidSimulated, asteroids = 
         } else {
           opacity = Math.max(0, (1 - (f.progress - half) / half) * f.maxOpacity);
         }
-        fogRef.current.material.opacity = opacity;
+        fogSphereRef.current.material.opacity = opacity;
         if (f.progress >= f.duration) {
-          f.active = false; f.progress = 0; fogRef.current.visible = false; fogRef.current.material.opacity = 0;
+          f.active = false; f.progress = 0; fogSphereRef.current.visible = false; fogSphereRef.current.material.opacity = 0;
         }
       }
 
@@ -996,8 +1110,6 @@ function Asteroid3DViewer({ onAsteroidsLoaded, onAsteroidSimulated, asteroids = 
                 Iniciar Simulación
             </Button>
             <Button onClick={reiniciar} variant='contained' startIcon={<ReplayIcon/>} color='error'>Reiniciar</Button>
-    <Button onClick={primerImpacto} variant='outlined' color='info'>Primer Impacto</Button>
-    <Button onClick={segundoImpacto} variant='outlined' color='secondary'>Segundo Impacto</Button>
             {isPaused ? <Button onClick={pauseContinue} variant='contained' startIcon={<PlayArrowIcon/>} color="warning" disabled={isSimulated}>Continuar</Button>
       :<Button onClick={pauseContinue} variant='contained' startIcon={<PauseIcon/>} color="warning" disabled={isSimulated}>Pausar</Button>
       }
