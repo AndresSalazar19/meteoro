@@ -5,6 +5,7 @@ import Home from "../pages/home";
 import Simulaciones from "../pages/simulaciones";
 import ListaMeteoritos from "../pages/listaMeteoritos";
 import DetalleMeteorito from "../pages/detalleMeteorito";
+import Chat from "../pages/Chat";
 
 export default function AppRoutes() {
   return (
@@ -48,6 +49,16 @@ export default function AppRoutes() {
         element={
           <MainLayout>
             <DetalleMeteorito />
+          </MainLayout>
+        }
+      />
+      
+      {/* Chat IA */}
+      <Route
+        path="/Chat"
+        element={
+          <MainLayout>
+            <Chat />
           </MainLayout>
         }
       />
