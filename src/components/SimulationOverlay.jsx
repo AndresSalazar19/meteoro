@@ -1,15 +1,16 @@
 import React from 'react';
 
-const SimulationOverlay = ({ 
+const SimulationOverlay = ({
   asteroids = [],
-  asteroid, 
-  onGoBack, 
-  viewMode, 
-  setViewMode, 
-  filterTerm, 
-  setFilterTerm, 
-  totalCount, 
-  filteredCount 
+  asteroid, // Este es el asteroide actualmente seleccionado para mostrar en el panel derecho
+  onGoBack,
+  viewMode,
+  setViewMode,
+  filterTerm,
+  setFilterTerm,
+  totalCount,
+  filteredCount,
+  onSelectAsteroid // <--- Nueva prop
 }) => {
   const getImpactDetails = (severity) => {
     switch (severity) {
@@ -120,13 +121,24 @@ const SimulationOverlay = ({
             .filter(a => !filterTerm || a.name.toLowerCase().includes(filterTerm.toLowerCase())).length}</p>
         )}
 
-        {/* Listado rápido de asteroides filtrados (read-only) */}
+        {/* Listado rápido de asteroides filtrados */}
         <div style={{ marginTop: '10px', maxHeight: '200px', overflowY: 'auto' }}>
           {asteroids
             .filter(a => viewMode === 'all' || a.source === viewMode)
             .filter(a => !filterTerm || a.name.toLowerCase().includes(filterTerm.toLowerCase()))
             .map((a, idx) => (
-              <div key={a.name + idx} style={{ padding: '6px 8px', borderBottom: '1px solid #444', color: '#ddd' }}>
+              <div
+                key={a.name + idx}
+                style={{
+                  padding: '6px 8px',
+                  borderBottom: '1px solid #444',
+                  color: '#ddd',
+                  cursor: 'pointer', // <--- Hace que el elemento sea clicable visualmente
+                  backgroundColor: asteroid && asteroid.name === a.name ? '#007bff40' : 'transparent', // Resalta el seleccionado
+                  transition: 'background-color 0.2s ease'
+                }}
+                onClick={() => onSelectAsteroid(a)} // <--- Manejador de clic
+              >
                 <div style={{ fontSize: '0.95em', fontWeight: '600' }}>{a.name}</div>
                 <div style={{ fontSize: '0.8em', color: '#bbb' }}>{a.source || 'api'} · a: {a.a?.toFixed?.(2) ?? a.a} AU · d: {a.size ? (a.size*2).toFixed(3)+' km' : 'N/A'}</div>
               </div>
@@ -155,15 +167,17 @@ const SimulationOverlay = ({
         </h3>
         {asteroid ? (
           <>
-            <p style={{ margin: '5px 0' }}>Variable 1: {asteroid.name}</p>
-            <p style={{ margin: '5px 0' }}>Variable 2: {asteroid.a?.toFixed(2)} AU</p>
-            <p style={{ margin: '5px 0' }}>Variable 3: {asteroid.e?.toFixed(2)}</p>
-            <p style={{ margin: '5px 0' }}>Variable 4: {asteroid.i?.toFixed(2)} deg</p>
-            <p style={{ margin: '5px 0' }}>Variable 5: {asteroid.diameterKm ? asteroid.diameterKm.toFixed(3) + ' km' : 'N/A'}</p>
-            <p style={{ margin: '5px 0' }}>Variable 6: {asteroid.velocityKms ? asteroid.velocityKms.toFixed(2) + ' km/s' : 'N/A'}</p>
+            <p style={{ margin: '5px 0' }}>Nombre: {asteroid.name}</p>
+            <p style={{ margin: '5px 0' }}>Semieje Mayor (a): {asteroid.a?.toFixed(2)} AU</p>
+            <p style={{ margin: '5px 0' }}>Excentricidad: {asteroid.e?.toFixed(2)}</p>
+            <p style={{ margin: '5px 0' }}>Inclinación: {asteroid.i?.toFixed(2)} deg</p>
+            <p style={{ margin: '5px 0' }}>Diámetro: {asteroid.diameterKm ? asteroid.diameterKm.toFixed(3) + ' km' : (asteroid.size ? (asteroid.size * 2).toFixed(3) + ' km' : 'N/A')}</p> {/* Ajuste para `size` o `diameterKm` */}
+            <p style={{ margin: '5px 0' }}>Velocidad: {asteroid.velocityKms ? asteroid.velocityKms.toFixed(2) + ' km/s' : 'N/A'}</p>
+            <p style={{ margin: '5px 0' }}>Fuente: {asteroid.source || 'API'}</p>
+            {/* Puedes añadir más detalles aquí si los tienes en el objeto `asteroid` */}
           </>
         ) : (
-          <p>No hay asteroide simulado.</p>
+          <p>Haz clic en un asteroide del listado para ver sus detalles.</p>
         )}
       </div>
 

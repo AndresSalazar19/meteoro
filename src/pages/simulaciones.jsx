@@ -10,8 +10,8 @@ export default function Simulaciones() {
   const [apiAsteroids, setApiAsteroids] = useState([]);
   // Asteroides creados manualmente desde el WhatIf panel
   const [manualAsteroids, setManualAsteroids] = useState([]);
-  // Asteroide actualmente seleccionado/simulado
-  const [selectedAsteroid, setSelectedAsteroid] = useState(null);
+  // Asteroide actualmente seleccionado/simulado. Este es el que se mostrará en el panel derecho.
+  const [selectedAsteroid, setSelectedAsteroid] = useState(null); // <--- Estado para el asteroide seleccionado
   // View/filter state para SimulationOverlay
   const [viewMode, setViewMode] = useState('api');
   const [filterTerm, setFilterTerm] = useState('');
@@ -48,16 +48,19 @@ export default function Simulaciones() {
       e: Number(orbital.eccentricity) || Number(simulationData.e) || 0,
       i: Number(orbital.inclination) || Number(simulationData.i) || 0,
       size: radiusKm, // viewer expects `size` as radius in km
+      diameterKm: radiusKm * 2, // Añadido para el panel derecho
       velocity: simulationData.velocityKms || simulationData.velocity || null,
+      velocityKms: simulationData.velocityKms || null, // Añadido para el panel derecho
       color: Math.floor(Math.random() * 0xffffff),
       source: 'manual',
       severity: radiusKm > 0.5 ? 'HIGH' : 'LOW'
     };
 
     setManualAsteroids(prev => [...prev, manual]);
+    setSelectedAsteroid(manual); // <--- Selecciona el asteroide recién creado
     setShowWhatIf(false);
   };
-//si
+
   // Callback para volver a mostrar el panel si lo necesitas
   const handleShowPanel = () => setShowWhatIf(true);
 
@@ -69,14 +72,15 @@ export default function Simulaciones() {
       <Asteorid3Dviewer
         asteroids={[...apiAsteroids, ...manualAsteroids]}
         onAsteroidsLoaded={(list) => setApiAsteroids(list)}
-        onAsteroidSimulated={(ast) => setSelectedAsteroid(ast)}
+        onAsteroidSimulated={(ast) => setSelectedAsteroid(ast)} // Esto ya seleccionaba un asteroide si era simulado
         viewMode={viewMode}
         filterTerm={filterTerm}
       />
 
       <SimulationOverlay
         asteroids={[...apiAsteroids, ...manualAsteroids]}
-        asteroid={selectedAsteroid}
+        asteroid={selectedAsteroid} // <--- Pasa el asteroide seleccionado
+        onSelectAsteroid={setSelectedAsteroid} // <--- Pasa la función para actualizar el asteroide seleccionado
         onGoBack={handleShowPanel}
         viewMode={viewMode}
         setViewMode={setViewMode}
