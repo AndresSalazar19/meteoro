@@ -4,7 +4,7 @@ export default function Nav() {
 
   return (
    <>
-      <div className="flex flex-col md:flex-row justify-center items-center text-white text-2xl drop-shadow-md pb-2 space-y-2 md:space-y-0 md:space-x-12 w-fit mx-auto">
+      <div className="flex flex-col md:flex-row justify-center items-center text-white text-2xl drop-shadow-md space-y-2 md:space-y-0 md:space-x-12 w-fit mx-auto pb-3 pt-1">
         <Link to="/listaMeteoritos" className="lilita hover:text-gray-300 transition-colors">
           Meteoritos
         </Link>

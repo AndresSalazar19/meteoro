@@ -1,7 +1,6 @@
 import React, { useState } from 'react';
 import Asteorid3Dviewer from "../components/Asteroid3DViewer";
 import WhatIfPanel from "../components/WhatIfPanel";
-import MainLayout from "../layouts/MainLayout";
 import SimulationOverlay from "../components/SimulationOverlay";
 
 export default function Simulaciones() {
@@ -62,32 +61,45 @@ export default function Simulaciones() {
   const handleShowPanel = () => setShowWhatIf(true);
 
   return (
-    <>
+    <>      
+    <div className="w-screen h-[90%] flex">
+
       {showWhatIf && (
         <WhatIfPanel onSimulate={handleSimulate} onViewStateChange={() => setShowWhatIf(false)} />
       )}
-      <Asteorid3Dviewer
-        asteroids={[...apiAsteroids, ...manualAsteroids]}
-        onAsteroidsLoaded={(list) => setApiAsteroids(list)}
-        onAsteroidSimulated={(ast) => setSelectedAsteroid(ast)}
-        viewMode={viewMode}
-        filterTerm={filterTerm}
-      />
 
-      <SimulationOverlay
-        asteroids={[...apiAsteroids, ...manualAsteroids]}
-        asteroid={selectedAsteroid}
-        onGoBack={handleShowPanel}
-        viewMode={viewMode}
-        setViewMode={setViewMode}
-        filterTerm={filterTerm}
-        setFilterTerm={setFilterTerm}
-        totalCount={[...apiAsteroids, ...manualAsteroids].length}
-        filteredCount={([].concat(apiAsteroids, manualAsteroids)
-          .filter(a => viewMode === 'all' || a.source === viewMode)
-          .filter(a => !filterTerm || a.name.toLowerCase().includes(filterTerm.toLowerCase()))
-          .length)}
-      />
+
+        <div className="w-[70%] bg-gray-200 flex items-center justify-center text-black">
+          <Asteorid3Dviewer
+          asteroids={[...apiAsteroids, ...manualAsteroids]}
+          onAsteroidsLoaded={(list) => setApiAsteroids(list)}
+          onAsteroidSimulated={(ast) => setSelectedAsteroid(ast)}
+          viewMode={viewMode}
+          filterTerm={filterTerm}
+          />
+        </div>
+        <div className="w-[30%] bg-gray-800 flex items-center justify-center text-white">
+          <SimulationOverlay
+            asteroids={[...apiAsteroids, ...manualAsteroids]}
+            asteroid={selectedAsteroid}
+            onGoBack={handleShowPanel}
+            viewMode={viewMode}
+            setViewMode={setViewMode}
+            filterTerm={filterTerm}
+            setFilterTerm={setFilterTerm}
+            totalCount={[...apiAsteroids, ...manualAsteroids].length}
+            filteredCount={([].concat(apiAsteroids, manualAsteroids)
+              .filter(a => viewMode === 'all' || a.source === viewMode)
+              .filter(a => !filterTerm || a.name.toLowerCase().includes(filterTerm.toLowerCase()))
+              .length)}
+          />
+        </div>
+
+
+
+      </div>
+
+
     </>
   );
 }

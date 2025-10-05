@@ -645,28 +645,77 @@ function Asteroid3DViewer({ onAsteroidsLoaded, onAsteroidSimulated, asteroids = 
   }, [viewMode, filterTerm, asteroids]);
  
   return (
-    <>
-    <div style={{ position: 'relative', width: '100vw', height: '100vh' }}>
-      <div ref={mountRef} style={{ width: '100%', height: '100%', overflow: 'hidden' }} />
-      <div style={{
+<>
+  {/* El contenedor usa el 100% del espacio que le dé el padre */}
+  <div
+    style={{
+      position: 'relative',
+      width: '100%',
+      height: '100%',
+      minWidth: 0,
+      minHeight: 0,
+      boxSizing: 'border-box',
+    }}
+  >
+    {/* El canvas/three ocupa todo el contenedor sin forzar scroll */}
+    <div
+      ref={mountRef}
+      style={{
         position: 'absolute',
-        bottom: '20px',
-        left: '0',
-        width: '100%',
+        inset: 0,                   // top:0, right:0, bottom:0, left:0
+        overflow: 'hidden',
+      }}
+    />
+
+    {/* Barra de controles, centrada y SIN provocar overflow */}
+    <div
+      style={{
+        position: 'fixed',
+        left: 0,
+        right: 0,
+        bottom: 12,
         display: 'flex',
         justifyContent: 'center',
-        gap: '20px',
-        zIndex: 10
-      }}>
-        <Button onClick={() => onAsteroidClick(selectedAsteroidRef.current)}
-              variant='contained' startIcon={<PlayCircleIcon/>} color='success' disabled={isSimulated}>
-                Iniciar Simulación
-            </Button>
-            <Button onClick={reiniciar} variant='contained' startIcon={<ReplayIcon/>} color='error'>Reiniciar</Button>
-            <Button onClick={pauseContinue} variant='contained' startIcon={<PauseIcon/>} color="warning" disabled={isSimulated}>Pausar</Button>
-      </div>
+        alignItems: 'center',
+        gap: 16,
+        padding: '0 12px',          // margen interno para no tocar bordes
+        zIndex: 10,
+        flexWrap: 'wrap',           // 👈 si el espacio es pequeño, los botones bajan a otra línea
+        boxSizing: 'border-box',
+        pointerEvents: 'auto',
+      }}
+    >
+      <Button
+        onClick={() => onAsteroidClick(selectedAsteroidRef.current)}
+        variant="contained"
+        startIcon={<PlayCircleIcon />}
+        color="success"
+        disabled={isSimulated}
+      >
+        Iniciar Simulación
+      </Button>
+
+      <Button
+        onClick={reiniciar}
+        variant="contained"
+        startIcon={<ReplayIcon />}
+        color="error"
+      >
+        Reiniciar
+      </Button>
+
+      <Button
+        onClick={pauseContinue}
+        variant="contained"
+        startIcon={<PauseIcon />}
+        color="warning"
+        disabled={isSimulated}
+      >
+        Pausar
+      </Button>
     </div>
-    </>
+  </div>
+</>
   );
 };
 

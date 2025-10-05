@@ -14,8 +14,9 @@
   -moz-osx-font-smoothing: grayscale;
 }
 
-html, body, #root {
-  height: 100%;
+html, body, #root { height: 100%; }
+body {
+  margin: 0;          /* 👈 evita barras por el margen por defecto */
 }
 
 html, body {

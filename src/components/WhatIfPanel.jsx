@@ -50,15 +50,15 @@ const WhatIfForm = ({ onSimulate, onViewStateChange }) => {
       backgroundColor: 'rgba(0,0,0,0.9)',
       zIndex: 20,
       overflowY: 'auto',
-      padding: '20px'
+      padding: '5px'
     }}>
-      <h1 style={{ fontSize: '3em', marginBottom: '10px', color: 'white', letterSpacing: '2px' }}>
+      <h1 style={{ fontSize: '3em', marginBottom: '0px', color: 'white', letterSpacing: '2px' }}>
         WHAT IF ?
       </h1>
-      <p style={{ fontSize: '1.2em', marginBottom: '5px', color: '#ccc' }}>
+      <p style={{ fontSize: '1.2em', marginBottom: '2px', color: '#ccc' }}>
         Simula escenarios de impacto de asteroides
       </p>
-      <p style={{ fontSize: '1.2em', marginBottom: '30px', color: '#ccc' }}>
+      <p style={{ fontSize: '1.2em', marginBottom: '10px', color: '#ccc' }}>
         Configura los parámetros orbitales y físicos del asteroide
       </p>
 
@@ -66,7 +66,7 @@ const WhatIfForm = ({ onSimulate, onViewStateChange }) => {
         display: 'grid',
         gridTemplateColumns: 'repeat(2, 1fr)',
         gap: '20px 40px',
-        marginBottom: '40px',
+        marginBottom: '15px',
         width: '80%',
         maxWidth: '900px'
       }}>
@@ -269,10 +269,10 @@ const WhatIfForm = ({ onSimulate, onViewStateChange }) => {
             Cálculos Automáticos
           </label>
           <div style={{ fontSize: '0.9em', color: '#ccc' }}>
-            <p style={{ margin: '5px 0' }}>
+            <p style={{ margin: '2px 0' }}>
               Diámetro Promedio: {((parseFloat(formData.diamMin) + parseFloat(formData.diamMax)) / 2 || 0).toFixed(3)} km
             </p>
-            <p style={{ margin: '5px 0' }}>
+            <p style={{ margin: '2px 0' }}>
               Radio: {(((parseFloat(formData.diamMin) + parseFloat(formData.diamMax)) / 2) / 2 || 0).toFixed(3)} km
             </p>
           </div>
@@ -287,7 +287,7 @@ const WhatIfForm = ({ onSimulate, onViewStateChange }) => {
         style={{
           backgroundColor: '#FF0000',
           color: 'white',
-          padding: '15px 40px',
+          padding: '3px 40px',
           border: 'none',
           borderRadius: '8px',
           cursor: 'pointer',
@@ -295,7 +295,7 @@ const WhatIfForm = ({ onSimulate, onViewStateChange }) => {
           fontWeight: 'bold',
           boxShadow: '0 0 15px rgba(255,0,0,0.6)',
           transition: 'background-color 0.3s, box-shadow 0.3s',
-          marginBottom: '40px'
+          marginBottom: '0px'
         }}
         onMouseOver={(e) => {
           e.target.style.backgroundColor = '#CC0000';
