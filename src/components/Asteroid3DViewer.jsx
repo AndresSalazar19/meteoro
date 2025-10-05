@@ -390,7 +390,7 @@ function Asteroid3DViewer({ onAsteroidsLoaded, onAsteroidSimulated, asteroids = 
             e: parseFloat(orbital.eccentricity) || 0,
             i: parseFloat(orbital.inclination) || 0,
             size: typeof radiusKm === 'number' ? radiusKm : 0.05,
-            velocity: velocity,
+            velocityKms: velocity,
             color: randomColor(),
             source: 'api',
             severity: neo.is_potentially_hazardous_asteroid ? 'HIGH' : 'LOW'
@@ -567,6 +567,9 @@ function Asteroid3DViewer({ onAsteroidsLoaded, onAsteroidSimulated, asteroids = 
           path.impactDone = true;
           simulationModeRef.current = "orbit";
           earthRotationRef.current = false;
+
+   
+          
         }
       }
 
