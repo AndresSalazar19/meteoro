@@ -6,14 +6,15 @@ import SimulationOverlay from "../components/SimulationOverlay";
 
 export default function Simulaciones() {
   const [showWhatIf, setShowWhatIf] = useState(true);
+  const [simulatedAsteroidData, setSimulatedAsteroidData] = useState(null); // Nuevo estado para los datos del asteroide
 
-  // Callback para ocultar el panel después de submit
-  const handleSimulate = (simulationData) => {
-    // Aquí podrías pasar simulationData a Asteorid3Dviewer si lo necesitas
-    setShowWhatIf(false);
+ 
+  const handleSimulate = (data) => {
+    setSimulatedAsteroidData(data); // Guarda los datos del asteroide en el estado
+    setShowWhatIf(false); 
   };
 
-  // Callback para volver a mostrar el panel si lo necesitas
+
   const handleShowPanel = () => setShowWhatIf(true);
 
   return (
@@ -21,7 +22,8 @@ export default function Simulaciones() {
       {showWhatIf && (
         <WhatIfPanel onSimulate={handleSimulate} onViewStateChange={() => setShowWhatIf(false)} />
       )}
-      <Asteorid3Dviewer/>
+
+      <Asteorid3Dviewer newAsteroidData={simulatedAsteroidData} />
       <SimulationOverlay />
     </>
   );

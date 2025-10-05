@@ -1,7 +1,11 @@
 import { useEffect, useRef } from 'react';
 import * as THREE from 'three';
 
-const Asteroid3DViewer = () => {
+// Helper function moved outside to be accessible everywhere
+const randomColor = () => Math.floor(Math.random() * 0xffffff);
+
+// Acepta `newAsteroidData` como prop
+const Asteroid3DViewer = ({ newAsteroidData }) => {
   const mountRef = useRef(null);
   const cameraRef = useRef(null);
   const earthRef = useRef(null);
@@ -19,6 +23,9 @@ const Asteroid3DViewer = () => {
   const asteroidMeshesRef = useRef([]);
   const simulationModeRef = useRef('orbit');
   const threatAsteroidRef = useRef(null);
+
+  // Nuevo ref para almacenar la función addAsteroidsToScene
+  const addAsteroidsToSceneRef = useRef(null);
 
   const onAsteroidClick = (asteroid) => {
     if (!asteroid) {
@@ -75,7 +82,10 @@ const Asteroid3DViewer = () => {
         ast.userData.impactPath = null;
         ast.userData.trail?.line?.parent?.remove(ast.userData.trail.line);
         ast.userData.trail = null;
-        ast.position.copy(ast.userData.orbitPoints[0]);
+        // Reinicia la posición del asteroide a su punto inicial de órbita
+        if (ast.userData.orbitPoints && ast.userData.orbitPoints.length > 0) {
+            ast.position.copy(ast.userData.orbitPoints[0]);
+        }
       }
     });
     threatAsteroidRef.current = null;
@@ -101,6 +111,7 @@ const Asteroid3DViewer = () => {
     const earthSystem = new THREE.Group();
     scene.add(earthSystem);
     
+    // Constantes de escala
     const R_EARTH_SCENE = 63.78;
     const EARTH_ORBIT_IN_EARTH_RADII = 50;
     const ORBIT_SCALE = R_EARTH_SCENE * EARTH_ORBIT_IN_EARTH_RADII;
@@ -218,8 +229,7 @@ const Asteroid3DViewer = () => {
     directionalLight.target.position.set(0, 0, 0);
     scene.add(directionalLight.target);
 
-    const randomColor = () => Math.floor(Math.random() * 0xffffff);
-
+    // Función para añadir asteroides a la escena
     const addAsteroidsToScene = (dataList) => {
       dataList.forEach((data) => {
         const scaledA = data.a * ORBIT_SCALE;
@@ -238,20 +248,30 @@ const Asteroid3DViewer = () => {
         
         const orbitGeometry = new THREE.BufferGeometry().setFromPoints(orbitPoints);
         const orbitMaterial = new THREE.LineBasicMaterial({
-          color: data.color,
+          color: data.color || randomColor(),
           transparent: true,
           opacity: 0.4
         });
         const orbitLine = new THREE.Line(orbitGeometry, orbitMaterial);
         orbitGroup.add(orbitLine);
 
-        let physicalRadiusKm = Math.max(data.size, MIN_ASTEROID_RADIUS_KM);
+        let physicalRadiusKm;
+        // Usa diamMinKm y diamMaxKm del WhatIfPanel
+        if (data.diamMinKm && data.diamMaxKm) {
+          physicalRadiusKm = (data.diamMinKm + data.diamMaxKm) / 2; // Promedio de diámetro
+          physicalRadiusKm = physicalRadiusKm / 2; // Radio
+        } else if (data.size) { // Fallback para datos de la API que pueden usar 'size'
+          physicalRadiusKm = data.size;
+        } else {
+          physicalRadiusKm = MIN_ASTEROID_RADIUS_KM;
+        }
+
         let radiusScene = physicalRadiusKm * ASTEROID_UNIFORM_SCALE;
         if (radiusScene > MAX_SCENE_RADIUS) radiusScene = MAX_SCENE_RADIUS;
         
         const asteroidGeometry = new THREE.SphereGeometry(radiusScene, 16, 16);
         const asteroidMaterial = new THREE.MeshPhongMaterial({
-          color: data.color,
+          color: data.color || randomColor(),
           shininess: 5
         });
         const asteroid = new THREE.Mesh(asteroidGeometry, asteroidMaterial);
@@ -260,13 +280,17 @@ const Asteroid3DViewer = () => {
           type: 'asteroid',
           orbit: data,
           orbitPoints,
-          currentIndex: 0
+          currentIndex: 0,
+          size: physicalRadiusKm // Guarda el tamaño físico para cálculos futuros
         };
         asteroid.position.copy(orbitPoints[0]);
         scene.add(asteroid);
         asteroidMeshesRef.current.push(asteroid);
       });
     };
+
+    // Almacena la función `addAsteroidsToScene` en el ref
+    addAsteroidsToSceneRef.current = addAsteroidsToScene;
 
     const controller = new AbortController();
     const API_KEY = import.meta.env.VITE_NASA_API_KEY || '2KzpzDksQWT2D2csD9Ja9wrdX8ruTcS290hH2mBK';
@@ -321,7 +345,7 @@ const Asteroid3DViewer = () => {
         const detailed = results.filter(r => r !== null);
         
         if (detailed.length) {
-          addAsteroidsToScene(detailed);
+          addAsteroidsToScene(detailed); // Añade los asteroides iniciales de la API
         }
       } catch (e) {
         if (e.name !== 'AbortError') {
@@ -494,8 +518,18 @@ const Asteroid3DViewer = () => {
         mount.removeChild(renderer.domElement);
       }
     };
-  }, []);
- 
+  }, []); // El useEffect principal se ejecuta una sola vez al montar el componente
+
+  // Nuevo useEffect para añadir el asteroide cuando newAsteroidData cambie
+  useEffect(() => {
+    if (newAsteroidData && addAsteroidsToSceneRef.current) {
+      console.log("Añadiendo nuevo asteroide simulado:", newAsteroidData.name);
+      // Asigna un color aleatorio al asteroide manual
+      const newAsteroidWithColor = { ...newAsteroidData, color: randomColor() };
+      addAsteroidsToSceneRef.current([newAsteroidWithColor]); // Llama a la función almacenada en el ref
+    }
+  }, [newAsteroidData]); // Este useEffect se ejecuta cuando la prop newAsteroidData cambia
+
   return (
     <div style={{ position: 'relative', width: '100vw', height: '100vh' }}>
       <div ref={mountRef} style={{ width: '100%', height: '100%', overflow: 'hidden' }} />

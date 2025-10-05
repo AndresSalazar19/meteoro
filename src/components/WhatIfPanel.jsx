@@ -22,16 +22,17 @@ const WhatIfForm = ({ onSimulate, onViewStateChange }) => {
       a: parseFloat(formData.semiMajorAxis) || 1,
       e: parseFloat(formData.eccentricity) || 0,
       i: parseFloat(formData.inclination) || 0,
+      // Pasa diamMinKm y diamMaxKm, que se usarán en Asteroid3DViewer
       diamMinKm: parseFloat(formData.diamMin),
       diamMaxKm: parseFloat(formData.diamMax),
       H: parseFloat(formData.absoluteMagnitude),
       velocityKms: parseFloat(formData.velocity)
     };
 
-    // Llamar al callback de simulación
+    // Llama al callback de simulación pasando todos los datos
     onSimulate(simulationData);
     
-    // Cambiar el estado de vista a 'simulation'
+    // Cambia el estado de vista a 'simulation'
     onViewStateChange('simulation');
   };
 
