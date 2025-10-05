@@ -50,23 +50,21 @@ const WhatIfForm = ({ onSimulate, onViewStateChange }) => {
       backgroundColor: 'rgba(0,0,0,0.9)',
       zIndex: 20,
       overflowY: 'auto',
-      padding: '20px'
+      padding: '10px'
     }}>
-      <h1 style={{ fontSize: '3em', marginBottom: '10px', color: 'white', letterSpacing: '2px' }}>
-        WHAT IF ?
+      <h1 style={{ fontSize: '3em', marginBottom: '1px', color: 'white', letterSpacing: '2px' }}>
+        <b>WHAT IF ?</b>
       </h1>
+
       <p style={{ fontSize: '1.2em', marginBottom: '5px', color: '#ccc' }}>
-        Simula escenarios de impacto de asteroides
-      </p>
-      <p style={{ fontSize: '1.2em', marginBottom: '30px', color: '#ccc' }}>
-        Configura los parámetros orbitales y físicos del asteroide
+        Simula escenarios de impacto de asteroides. Configura los parámetros orbitales y físicos del asteroide.
       </p>
 
       <div style={{
         display: 'grid',
         gridTemplateColumns: 'repeat(2, 1fr)',
-        gap: '20px 40px',
-        marginBottom: '40px',
+        gap: '10px 40px',
+        marginBottom: '5px',
         width: '80%',
         maxWidth: '900px'
       }}>
@@ -261,7 +259,7 @@ const WhatIfForm = ({ onSimulate, onViewStateChange }) => {
           flexDirection: 'column',
           gap: '8px',
           background: 'rgba(76, 175, 80, 0.1)',
-          padding: '15px',
+          padding: '5px',
           borderRadius: '5px',
           border: '1px solid rgba(76, 175, 80, 0.3)'
         }}>
@@ -287,7 +285,7 @@ const WhatIfForm = ({ onSimulate, onViewStateChange }) => {
         style={{
           backgroundColor: '#FF0000',
           color: 'white',
-          padding: '15px 40px',
+          padding: '5px 40px',
           border: 'none',
           borderRadius: '8px',
           cursor: 'pointer',
@@ -295,7 +293,8 @@ const WhatIfForm = ({ onSimulate, onViewStateChange }) => {
           fontWeight: 'bold',
           boxShadow: '0 0 15px rgba(255,0,0,0.6)',
           transition: 'background-color 0.3s, box-shadow 0.3s',
-          marginBottom: '40px'
+          marginBottom: '10px',
+          marginTop: '10px'
         }}
         onMouseOver={(e) => {
           e.target.style.backgroundColor = '#CC0000';
