@@ -1,11 +1,11 @@
-import  { Link } from 'react-router-dom';
+import { Link } from 'react-router-dom';
 
 export default function Home() {      
    return (
     <>
     <div className="relative h-screen w-full overflow-hidden">
-    <video
-        src="../public/gifMeteoro.mp4"
+      <video
+        src="/gifMeteoro.mp4"
         autoPlay
         loop
         muted
@@ -19,14 +19,12 @@ export default function Home() {
             METEORO
           </p>
           <div className="flex flex-col md:flex-row justify-between items-center w-full text-white text-3xl drop-shadow-lg pb-5 space-y-4 md:space-y-0">
-            <Link to='/listaMeteoritos' className='lilita' >Meteoritos </Link>
+            <Link to='/listaMeteoritos' className='lilita'>Meteoritos</Link>
             <Link to='/simulaciones' className='lilita'>Simulaciones</Link>
           </div>
         </div>
-
       </div>
-      </div>
+    </div>
     </>
   );
 }
-
