@@ -649,7 +649,7 @@ function Asteroid3DViewer({ onAsteroidsLoaded, onAsteroidSimulated, asteroids = 
     <div style={{ position: 'relative', width: '100vw', height: '100vh' }}>
       <div ref={mountRef} style={{ width: '100%', height: '100%', overflow: 'hidden' }} />
       <div style={{
-        position: 'absolute',
+        position: 'fixed',
         bottom: '20px',
         left: '0',
         width: '100%',
@@ -663,8 +663,10 @@ function Asteroid3DViewer({ onAsteroidsLoaded, onAsteroidSimulated, asteroids = 
                 Iniciar Simulación
             </Button>
             <Button onClick={reiniciar} variant='contained' startIcon={<ReplayIcon/>} color='error'>Reiniciar</Button>
-            <Button onClick={pauseContinue} variant='contained' startIcon={<PauseIcon/>} color="warning" disabled={isSimulated}>Pausar</Button>
-      </div>
+            {isPaused ? <Button onClick={pauseContinue} variant='contained' startIcon={<PlayArrowIcon/>} color="warning" disabled={isSimulated}>Continuar</Button>
+      :<Button onClick={pauseContinue} variant='contained' startIcon={<PauseIcon/>} color="warning" disabled={isSimulated}>Pausar</Button>
+      }
+            </div>
     </div>
     </>
   );
