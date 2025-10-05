@@ -1,15 +1,16 @@
-import React from 'react';
+import React , { useMemo } from 'react';
 
-const SimulationOverlay = ({ 
+const SimulationOverlay = ({
   asteroids = [],
-  asteroid, 
-  onGoBack, 
-  viewMode, 
-  setViewMode, 
-  filterTerm, 
-  setFilterTerm, 
-  totalCount, 
-  filteredCount 
+  asteroid, // Este es el asteroide actualmente seleccionado para mostrar en el panel derecho
+  onGoBack,
+  viewMode,
+  setViewMode,
+  filterTerm,
+  setFilterTerm,
+  totalCount,
+  filteredCount,
+  onSelectAsteroid // <--- Nueva prop
 }) => {
   const getImpactDetails = (severity) => {
     switch (severity) {
@@ -25,6 +26,55 @@ const SimulationOverlay = ({
   };
 
   const impactDetails = asteroid ? getImpactDetails(asteroid.severity) : getImpactDetails(null);
+  
+  console.log(asteroids)
+  const DEFAULT_DENSITY = 3000; // kg/m^3 (rocoso). Ajusta si usas composición.
+  // ============== UTILIDADES INTERNAS ==============
+  const computeEnergyMt = (radiusKm, velocityKmS, density = DEFAULT_DENSITY) => {
+    if (!Number.isFinite(radiusKm) || radiusKm <= 0 || !Number.isFinite(velocityKmS) || velocityKmS <= 0) return 0;
+    const r_m = radiusKm * 1000;
+    const v_ms = velocityKmS * 1000;
+    const volume_m3 = (4 / 3) * Math.PI * Math.pow(r_m, 3);
+    const mass_kg = density * volume_m3;
+    const energyJ = 0.5 * mass_kg * Math.pow(v_ms, 2);
+    return energyJ / 4.184e15; // -> Megatones TNT
+  };
+
+  const severityFromEnergyMt = (energyMt) => {
+    if (energyMt >= 1000) return { key: "E3_CATASTROPHIC", label: "Catastrófica" };
+    if (energyMt >= 10)   return { key: "E2_SEVERE",       label: "Severa" };
+    if (energyMt >= 0.1)  return { key: "E1_SIGNIFICANT",  label: "Significativa" };
+    return { key: "E0_MINI",        label: "Mínima" };
+  };
+
+  // Combina tu flag de PHA (HIGH/LOW) con la clase por energía para 4 casos finales
+  const combineDangerLevel = (severityFlag, energyClassKey) => {
+    const isPHA = severityFlag === 'HIGH';
+    if (energyClassKey === "E3_CATASTROPHIC") return { nivel: "Extremo",  desc: "Impacto con efectos globales" };
+    if (energyClassKey === "E2_SEVERE")       return { nivel: isPHA ? "Alto" : "Moderado", desc: isPHA ? "Riesgo regional severo" : "Riesgo regional relevante" };
+    if (energyClassKey === "E1_SIGNIFICANT")  return { nivel: isPHA ? "Moderado" : "Bajo",  desc: isPHA ? "Daños de ciudad probables" : "Daños de ciudad posibles" };
+    return { nivel: "Bajo", desc: "Airburst/daños locales menores" };
+  };
+
+  const asteroidsEnriquecidos = useMemo(() => {
+    return asteroids.map(a => {
+      const radiusKm = Number(a.size) || 0;        // 'size' es radio (km) según tu shape
+      const velocityKmS = Number(a.velocity) || 0; // km/s
+      const energyMt = computeEnergyMt(radiusKm, velocityKmS);
+      const eClass = severityFromEnergyMt(energyMt);
+      const danger = combineDangerLevel(a.severity, eClass.key); // a.severity: 'HIGH' | 'LOW'
+
+      return {
+        ...a,
+        energyMt,                                       
+        severity_con_respecto_a_energya: eClass.label,  
+        danger4: danger.nivel,                          
+        danger_desc: danger.desc
+      };
+    });
+  }, [asteroids]);
+
+  console.log(asteroid)
 
   return (
     <>
@@ -120,13 +170,30 @@ const SimulationOverlay = ({
             .filter(a => !filterTerm || a.name.toLowerCase().includes(filterTerm.toLowerCase())).length}</p>
         )}
 
-        {/* Listado rápido de asteroides filtrados (read-only) */}
         <div style={{ marginTop: '10px', maxHeight: '200px', overflowY: 'auto' }}>
           {asteroids
             .filter(a => viewMode === 'all' || a.source === viewMode)
             .filter(a => !filterTerm || a.name.toLowerCase().includes(filterTerm.toLowerCase()))
             .map((a, idx) => (
-              <div key={a.name + idx} style={{ padding: '6px 8px', borderBottom: '1px solid #444', color: '#ddd' }}>
+              <div
+                key={a.name + idx}
+                style={{
+                  padding: '6px 8px',
+                  borderBottom: '1px solid #444',
+                  color: '#ddd',
+                  cursor: 'pointer', // <--- Hace que el elemento sea clicable visualmente
+                  backgroundColor: asteroid && asteroid.name === a.name ? '#007bff40' : 'transparent', // Resalta el seleccionado
+                  transition: 'background-color 0.2s ease'
+                }}
+                onClick={() => {
+                  // Buscar el asteroide enriquecido correspondiente
+                  const asteroidEnriquecido = asteroidsEnriquecidos.find(ae => ae.name === a.name);
+                  // Combinar ambos objetos
+                  const asteroidCombinado = { ...a, ...asteroidEnriquecido };
+                  onSelectAsteroid(asteroidCombinado);
+                }}
+                
+              >
                 <div style={{ fontSize: '0.95em', fontWeight: '600' }}>{a.name}</div>
                 <div style={{ fontSize: '0.8em', color: '#bbb' }}>{a.source || 'api'} · a: {a.a?.toFixed?.(2) ?? a.a} AU · d: {a.size ? (a.size*2).toFixed(3)+' km' : 'N/A'}</div>
               </div>
@@ -155,15 +222,17 @@ const SimulationOverlay = ({
         </h3>
         {asteroid ? (
           <>
-            <p style={{ margin: '5px 0' }}>Variable 1: {asteroid.name}</p>
-            <p style={{ margin: '5px 0' }}>Variable 2: {asteroid.a?.toFixed(2)} AU</p>
-            <p style={{ margin: '5px 0' }}>Variable 3: {asteroid.e?.toFixed(2)}</p>
-            <p style={{ margin: '5px 0' }}>Variable 4: {asteroid.i?.toFixed(2)} deg</p>
-            <p style={{ margin: '5px 0' }}>Variable 5: {asteroid.diameterKm ? asteroid.diameterKm.toFixed(3) + ' km' : 'N/A'}</p>
-            <p style={{ margin: '5px 0' }}>Variable 6: {asteroid.velocityKms ? asteroid.velocityKms.toFixed(2) + ' km/s' : 'N/A'}</p>
+            <p style={{ margin: '5px 0' }}>Nombre: {asteroid.name}</p>
+            <p style={{ margin: '5px 0' }}>Semieje Mayor (a): {asteroid.a?.toFixed(2)} AU</p>
+            <p style={{ margin: '5px 0' }}>Excentricidad: {asteroid.e?.toFixed(2)}</p>
+            <p style={{ margin: '5px 0' }}>Inclinación: {asteroid.i?.toFixed(2)} deg</p>
+            <p style={{ margin: '5px 0' }}>Diámetro: {asteroid.diameterKm ? asteroid.diameterKm.toFixed(3) + ' km' : (asteroid.size ? (asteroid.size * 2).toFixed(3) + ' km' : 'N/A')}</p> {/* Ajuste para `size` o `diameterKm` */}
+            <p style={{ margin: '5px 0' }}>Velocidad: {asteroid.velocityKms ? asteroid.velocityKms.toFixed(2) + ' km/s' : 'N/A'}</p>
+            <p style={{ margin: '5px 0' }}>Fuente: {asteroid.source || 'API'}</p>
+            {/* Puedes añadir más detalles aquí si los tienes en el objeto `asteroid` */}
           </>
         ) : (
-          <p>No hay asteroide simulado.</p>
+          <p>Haz clic en un asteroide del listado para ver sus detalles.</p>
         )}
       </div>
 
@@ -195,9 +264,9 @@ const SimulationOverlay = ({
           fontSize: '0.9em',
           pointerEvents: 'auto'
         }}>
-          <p style={{ margin: '3px 0' }}>Prob. de impacto: {impactDetails.prob}</p>
-          <p style={{ margin: '3px 0' }}>Escala de Turín: {impactDetails.turin}</p>
-          <p style={{ margin: '3px 0' }}>Riesgo: {impactDetails.riesgo}</p>
+          <p style={{ margin: '3px 0' }}>Severidad: {asteroid?.severity || 'N/A'}</p>
+          <p style={{ margin: '3px 0' }}>Danger description: {asteroid?.danger_desc || 'N/A'}</p>
+          <p style={{ margin: '3px 0' }}>Danger respect the Energy: {asteroid?.severity_con_respecto_a_energya || 'N/A'}</p>
           <div style={{
             width: '80px',
             height: '40px',
