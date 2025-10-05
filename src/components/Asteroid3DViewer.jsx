@@ -1,4 +1,12 @@
-import { useEffect, useRef } from 'react';
+// src/components/Asteroid3DViewer.jsx
+
+import React, { useEffect, useRef, useState } from 'react';
+import { Button } from '@mui/material';
+import PlayArrowIcon from '@mui/icons-material/PlayArrow';
+import ReplayIcon from '@mui/icons-material/Replay';
+import PauseIcon from '@mui/icons-material/Pause';
+import PlayCircleIcon from '@mui/icons-material/PlayCircle';
+
 import * as THREE from 'three';
 
 const Asteroid3DViewer = () => {
@@ -19,15 +27,28 @@ const Asteroid3DViewer = () => {
   const asteroidMeshesRef = useRef([]);
   const simulationModeRef = useRef('orbit');
   const threatAsteroidRef = useRef(null);
+  const [isSimulated, setIsSimulated] = useState(false);
+  const [isPaused, setIsPaused] = useState(false);
 
   const onAsteroidClick = (asteroid) => {
     if (!asteroid) {
       console.log('Asteroide no encontrado');
       return;
     }
+
+    // Si ya se inició la simulación, no se permite re-simular
+    if (isSimulated) return;
+    // Se ignora el estado de pausa al simular
+    setIsPaused(false);
+    setIsSimulated(true);
+
+    // Dirección desde el asteroide hacia el objetivo (origen)
     const directionToOrigin = new THREE.Vector3().subVectors(new THREE.Vector3(0,0,0), asteroid.position).normalize();
-    const asteroidRadius = asteroid.geometry?.parameters?.radius || (asteroid.userData?.size ? asteroid.userData.size * 100 : 10);
-    const distanceBehind = Math.max(asteroidRadius * 20, 400);
+    // Determinar un offset dinámico en función del tamaño del asteroide
+   const asteroidRadius = asteroid.geometry?.parameters?.radius || (asteroid.userData?.size ? asteroid.userData.size * 100 : 10);
+    // Alejamos un poco más para asegurar que la Tierra siga siendo visible mientras seguimos la trayectoria
+   const distanceBehind = Math.max(asteroidRadius * 20, 400); // distancia mínima aumentada
+    // Posicionar la cámara detrás del asteroide (opuesto a la dirección hacia el origen)
     const cameraTargetPos = asteroid.position.clone().add(directionToOrigin.clone().multiplyScalar(-distanceBehind));
     const cameraTargetLook = asteroid.position.clone();
 
@@ -68,6 +89,7 @@ const Asteroid3DViewer = () => {
   const reiniciar = () => {
     simulationModeRef.current = "orbit";
     earthRotationRef.current = true;
+    moonRotationRef.current = true;
 
     asteroidMeshesRef.current.forEach(ast => {
       if (ast.userData.impactPath) {
@@ -79,17 +101,21 @@ const Asteroid3DViewer = () => {
       }
     });
     threatAsteroidRef.current = null;
-  };
+    setIsSimulated(false);
+    setIsPaused(false);
+  }
 
   const pauseContinue = () => {
     if (simulationModeRef.current === "orbit") {
       simulationModeRef.current = "paused";
       earthRotationRef.current = false;
       moonRotationRef.current = false;
+      setIsPaused(true);
     } else if (simulationModeRef.current === "paused") {
       simulationModeRef.current = "orbit";
       earthRotationRef.current = true;
       moonRotationRef.current = true;
+      setIsPaused(false);
     }
   };
 
@@ -497,6 +523,7 @@ const Asteroid3DViewer = () => {
   }, []);
  
   return (
+    <>
     <div style={{ position: 'relative', width: '100vw', height: '100vh' }}>
       <div ref={mountRef} style={{ width: '100%', height: '100%', overflow: 'hidden' }} />
       <div style={{
@@ -509,50 +536,15 @@ const Asteroid3DViewer = () => {
         gap: '20px',
         zIndex: 10
       }}>
-        <button 
-          onClick={() => onAsteroidClick(asteroidMeshesRef.current.find(a => a.userData.name === '(1999 GR6)'))}
-          style={{
-            padding: '10px 20px',
-            backgroundColor: '#4CAF50',
-            color: 'white',
-            border: 'none',
-            borderRadius: '5px',
-            cursor: 'pointer',
-            fontSize: '16px'
-          }}
-        >
-          Iniciar Simulación
-        </button>
-        <button 
-          onClick={reiniciar}
-          style={{
-            padding: '10px 20px',
-            backgroundColor: '#f44336',
-            color: 'white',
-            border: 'none',
-            borderRadius: '5px',
-            cursor: 'pointer',
-            fontSize: '16px'
-          }}
-        >
-          Reiniciar
-        </button>
-        <button 
-          onClick={pauseContinue}
-          style={{
-            padding: '10px 20px',
-            backgroundColor: '#2196F3',
-            color: 'white',
-            border: 'none',
-            borderRadius: '5px',
-            cursor: 'pointer',
-            fontSize: '16px'
-          }}
-        >
-          Pausar
-        </button>
+        <Button onClick={() => onAsteroidClick(asteroidMeshesRef.current.find(a => a.userData.name === '(1999 GR6)'))}
+              variant='contained' startIcon={<PlayCircleIcon/>} color='success' disabled={isSimulated || isPaused}>
+                Iniciar Simulación
+            </Button>
+            <Button onClick={reiniciar} variant='contained' startIcon={<ReplayIcon/>} color='error'>Reiniciar</Button>
+            <Button onClick={pauseContinue} variant='contained' startIcon={<PauseIcon/>} color="warning" disabled={isSimulated}>Pausar</Button>
       </div>
     </div>
+    </>
   );
 };
 
