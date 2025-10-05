@@ -267,21 +267,41 @@ const SimulationOverlay = ({
           <p style={{ margin: '3px 0' }}>Severidad: {asteroid?.severity || 'N/A'}</p>
           <p style={{ margin: '3px 0' }}>Danger description: {asteroid?.danger_desc || 'N/A'}</p>
           <p style={{ margin: '3px 0' }}>Danger respect the Energy: {asteroid?.severity_con_respecto_a_energya || 'N/A'}</p>
-          <div style={{
-            width: '80px',
-            height: '40px',
-            border: '1px solid white',
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            marginTop: '8px',
-            fontSize: '0.7em',
-            background: `conic-gradient(#4CAF50 ${parseInt(impactDetails.turin) * 10}%, #FFC107 ${parseInt(impactDetails.turin) * 10}% ${parseInt(impactDetails.turin) * 20}%, #FF0000 ${parseInt(impactDetails.turin) * 20}%)`
-          }}>
-            {impactDetails.riesgo === 'Bajo' && '🟢'}
-            {impactDetails.riesgo === 'Medio' && '🟠'}
-            {impactDetails.riesgo === 'Alto' && '🔴'}
-          </div>
+<div
+            style={{
+              width: '80px',
+              height: '40px',
+              border: '1px solid white',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              marginTop: '8px',
+              fontSize: '1.5em',
+              borderRadius: '6px',
+              transition: 'all 0.5s ease',
+              background:
+                asteroid?.severity_con_respecto_a_energya === 'Mínima'
+                  ? '#4CAF50' // verde
+                  : asteroid?.severity_con_respecto_a_energya === 'Significativa'
+                  ? '#FFC107' // amarillo
+                  : asteroid?.severity_con_respecto_a_energya === 'Severa'
+                  ? '#FF9800' // naranja
+                  : asteroid?.severity_con_respecto_a_energya === 'Catastrófica'
+                  ? '#F44336' // rojo
+                  : 'gray',
+              boxShadow:
+                asteroid?.severity_con_respecto_a_energya === 'Catastrófica'
+                  ? '0 0 15px 5px rgba(244,67,54,0.7)'
+                  : asteroid?.severity_con_respecto_a_energya === 'Severa'
+                  ? '0 0 10px 3px rgba(255,152,0,0.5)'
+                  : 'none'
+            }}
+          >
+            {asteroid?.severity_con_respecto_a_energya === 'Mínima' && '🟢'}
+            {asteroid?.severity_con_respecto_a_energya === 'Significativa' && '🟡'}
+            {asteroid?.severity_con_respecto_a_energya === 'Severa' && '🟠'}
+            {asteroid?.severity_con_respecto_a_energya === 'Catastrófica' && '🔴'}
+            </div>
         </div>
 
         {/* Panel Inferior Derecho */}
