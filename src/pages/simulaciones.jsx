@@ -102,22 +102,24 @@ export default function Simulaciones() {
 
   return (
 
+    <>
 
-<div className="fixed inset-0 flex overflow-hidden">
-  {showWhatIf && (
-    <WhatIfPanel onSimulate={handleSimulate} onViewStateChange={() => setShowWhatIf(false)} />
-  )}
+    <div className="w-screen h-[90%] flex overflow-hidden">
+      {showWhatIf && (
+        <WhatIfPanel onSimulate={handleSimulate} onViewStateChange={() => setShowWhatIf(false)} />
+      )}
+      <div className="w-[70%] bg-gray-800 flex items-center justify-center text-white overflow-hidden">
+      <Asteorid3Dviewer
+        asteroids={[...apiAsteroids, ...manualAsteroids]}
+        onAsteroidsLoaded={(list) => setApiAsteroids(list)}
+        onAsteroidSimulated={(ast) => setSelectedAsteroid(ast)} // Esto ya seleccionaba un asteroide si era simulado
+        viewMode={viewMode}
+        filterTerm={filterTerm}
+        selectedAsteroid={selectedAsteroid} // <-- Pasa el asteroide seleccionado para que el viewer lo resalte/enfoque
+      />
 
-  <div className="w-[70%] h-full min-w-0 bg-gray-800 text-white overflow-hidden">
-    <Asteorid3Dviewer
-      asteroids={[...apiAsteroids, ...manualAsteroids]}
-      onAsteroidsLoaded={(list) => setApiAsteroids(list)}
-      onAsteroidSimulated={(ast) => setSelectedAsteroid(ast)}
-      viewMode={viewMode}
-      filterTerm={filterTerm}
-      selectedAsteroid={selectedAsteroid}
-    />
-  </div>
+      </div>
+
 
   <div className="w-[30%] h-full min-w-0 bg-gray-200 text-black overflow-hidden">
     {/* wrapper con scroll interno SOLO si hace falta */}
@@ -140,6 +142,7 @@ export default function Simulaciones() {
     </div>
   </div>
 </div>
+</>
     
   );
 }

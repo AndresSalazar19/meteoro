@@ -5,7 +5,7 @@ import '../index.css';
 
 export default function MainLayout({ children }) {
   return (
-    <div className="min-h-screen flex flex-col justify-center items-center w-screen pt-5">
+    <div className="min-h-screen flex flex-col justify-center items-center w-screen pt-10">
       <Nav/>
       <main className="flex-1">{children}</main>
       
