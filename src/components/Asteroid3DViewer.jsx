@@ -269,7 +269,7 @@ const Asteroid3DViewer = () => {
     };
 
     const controller = new AbortController();
-    const API_KEY = '2KzpzDksQWT2D2csD9Ja9wrdX8ruTcS290hH2mBK';
+    const API_KEY = import.meta.env.VITE_NASA_API_KEY || '2KzpzDksQWT2D2csD9Ja9wrdX8ruTcS290hH2mBK';
     const FEED_URL = `https://api.nasa.gov/neo/rest/v1/feed?start_date=2025-12-19&end_date=2025-12-26&api_key=${API_KEY}`;
 
     const fetchAsteroids = async () => {
@@ -283,7 +283,16 @@ const Asteroid3DViewer = () => {
           if (Array.isArray(arr)) neoList.push(...arr);
         });
         
-        const links = Array.from(new Set(neoList.map(n => n.links?.self).filter(Boolean)));
+        // CORRECCIÓN: Forzar HTTPS en todos los links
+        const links = Array.from(
+          new Set(
+            neoList
+              .map(n => n.links?.self)
+              .filter(Boolean)
+              .map(url => url.replace('http://', 'https://'))
+          )
+        );
+
         const fetchPromises = links.map(async (url) => {
           try {
             const r = await fetch(url, { signal: controller.signal });
