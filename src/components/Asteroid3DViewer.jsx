@@ -31,6 +31,10 @@ function Asteroid3DViewer({ onAsteroidsLoaded, onAsteroidSimulated, asteroids = 
   const selectedAsteroidRef = useRef(null);
   const [isSimulated, setIsSimulated] = useState(false);
   const [isPaused, setIsPaused] = useState(false);
+  // Nuevos refs para efectos de impacto escalonados
+  const shockwavesRef = useRef([]); // almacena ondas expansivas activas
+  const originalEarthColorRef = useRef(null); // para restaurar color original
+  const fogRef = useRef(null); // referencia a la neblina añadida
 
   // Scene-wide constants available to both the mount effect and prop-change effect
   const R_EARTH_SCENE = 63.78;
@@ -187,6 +191,88 @@ function Asteroid3DViewer({ onAsteroidsLoaded, onAsteroidSimulated, asteroids = 
     setIsSimulated(false);
     setIsPaused(false);
   }
+
+  /**
+   * Crea una pequeña onda expansiva (primer impacto) alrededor de la Tierra.
+   * No agrega neblina ni cambia el color del planeta.
+   */
+  const primerImpacto = () => {
+    if (!sceneRef.current || !earthRef.current) return;
+    crearOndaExpansiva({
+      color: 0xffffff,
+      duracion: 2500,
+      escalaFinal: 3.5,
+      opacidadInicial: 0.9
+    });
+  };
+
+  /**
+   * Segundo impacto: agrega neblina ligera y tiñe el planeta a un naranja tenue.
+   * También genera una onda expansiva algo mayor para dar continuidad visual.
+   */
+  const segundoImpacto = () => {
+    if (!sceneRef.current || !earthRef.current) return;
+    // Guardar color original sólo la primera vez
+    const earthMat = earthRef.current.material;
+    if (!originalEarthColorRef.current) {
+      originalEarthColorRef.current = earthMat.color.clone();
+    }
+    // Tinte naranja tenue (mezcla hacia #ffb066 sin perder completamente la textura)
+    earthMat.color.lerp(new THREE.Color(0xffb066), 0.35);
+    // Añadir neblina si no existe
+    if (!fogRef.current) {
+      fogRef.current = new THREE.FogExp2(0xffa960, 0.0009); // densidad baja
+      sceneRef.current.fog = fogRef.current;
+    }
+    crearOndaExpansiva({
+      color: 0xffc27a,
+      duracion: 3200,
+      escalaFinal: 4.2,
+      opacidadInicial: 0.85
+    });
+  };
+
+  /**
+   * Utilidad para crear una onda expansiva circular que se expande y desvanece.
+   * @param {Object} cfg
+   * @param {number} cfg.color - color de la onda
+   * @param {number} cfg.duracion - duración en ms
+   * @param {number} cfg.escalaFinal - factor de escala final relativo
+   * @param {number} cfg.opacidadInicial - opacidad inicial
+   */
+  const crearOndaExpansiva = (cfg = {}) => {
+    if (!sceneRef.current || !earthRef.current) return;
+    const {
+      color = 0xffffff,
+      duracion = 2000,
+      escalaFinal = 3,
+      opacidadInicial = 1
+    } = cfg;
+
+    const innerR = R_EARTH_SCENE * 1.01;
+    const outerR = R_EARTH_SCENE * 1.015;
+    const ringGeo = new THREE.RingGeometry(innerR, outerR, 72);
+    // Material con blending aditivo para efecto luminoso suave
+    const ringMat = new THREE.MeshBasicMaterial({
+      color,
+      transparent: true,
+      opacity: opacidadInicial,
+      side: THREE.DoubleSide,
+      blending: THREE.AdditiveBlending,
+      depthWrite: false
+    });
+    const ring = new THREE.Mesh(ringGeo, ringMat);
+    // Orientar la onda expansiva: alineada al ecuador terrestre (puede ajustarse)
+    ring.rotation.x = Math.PI / 2;
+    ring.position.copy(earthRef.current.position);
+    sceneRef.current.add(ring);
+    shockwavesRef.current.push({
+      mesh: ring,
+      startTime: performance.now(),
+      duration: duracion,
+      escalaFinal
+    });
+  };
 
   const pauseContinue = () => {
     if (simulationModeRef.current === "orbit") {
@@ -581,6 +667,25 @@ function Asteroid3DViewer({ onAsteroidsLoaded, onAsteroidSimulated, asteroids = 
         cameraRef.current.position.z = cameraDistance * Math.sin(cameraRotation.phi) * Math.cos(cameraRotation.theta);
         cameraRef.current.lookAt(0, 0, 0);
       }
+
+      // Actualizar ondas expansivas activas
+      if (shockwavesRef.current.length > 0) {
+        const now = performance.now();
+        for (let i = shockwavesRef.current.length - 1; i >= 0; i--) {
+          const sw = shockwavesRef.current[i];
+            const t = (now - sw.startTime) / sw.duration;
+            if (t >= 1) {
+              sceneRef.current.remove(sw.mesh);
+              sw.mesh.geometry.dispose();
+              sw.mesh.material.dispose();
+              shockwavesRef.current.splice(i, 1);
+              continue;
+            }
+            const escala = 1 + (sw.escalaFinal - 1) * t;
+            sw.mesh.scale.set(escala, escala, escala);
+            sw.mesh.material.opacity = 1 - t;
+        }
+      }
         
       renderer.render(scene, cameraRef.current);
       animationId = requestAnimationFrame(animate);
@@ -663,6 +768,8 @@ function Asteroid3DViewer({ onAsteroidsLoaded, onAsteroidSimulated, asteroids = 
                 Iniciar Simulación
             </Button>
             <Button onClick={reiniciar} variant='contained' startIcon={<ReplayIcon/>} color='error'>Reiniciar</Button>
+    <Button onClick={primerImpacto} variant='outlined' color='info'>Primer Impacto</Button>
+    <Button onClick={segundoImpacto} variant='outlined' color='secondary'>Segundo Impacto</Button>
             {isPaused ? <Button onClick={pauseContinue} variant='contained' startIcon={<PlayArrowIcon/>} color="warning" disabled={isSimulated}>Continuar</Button>
       :<Button onClick={pauseContinue} variant='contained' startIcon={<PauseIcon/>} color="warning" disabled={isSimulated}>Pausar</Button>
       }
