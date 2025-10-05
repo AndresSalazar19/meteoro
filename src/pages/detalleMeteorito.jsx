@@ -158,7 +158,7 @@ export default function DetalleMeteorito() {
   };
 
   return (
-    <div className="flex w-full h-screen">
+    <div className="flex w-full h-screen ">
   {/* Lateral */}
   <div className="w-[10%] flex items-start justify-start m-4">
     <Link
@@ -267,7 +267,7 @@ export default function DetalleMeteorito() {
 
       {/* Resultado IA */}
       {aiOutput && (
-        <div className="mt-4 rounded-2xl border border-white/10 p-4 bg-black/30">
+        <div className="mt-4 mb-6 rounded-2xl border border-white/10 p-4 bg-black/30">
           <pre className="text-white/90 text-sm whitespace-pre-wrap">{aiOutput}</pre>
         </div>
       )}

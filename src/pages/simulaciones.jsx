@@ -153,19 +153,27 @@ export default function Simulaciones() {
   }, [selectedAsteroid, enrichedAsteroids]);
 
   return (
-    <>
-      {showWhatIf && (
-        <WhatIfPanel onSimulate={handleSimulate} onViewStateChange={() => setShowWhatIf(false)} />
-      )}
-      <Asteorid3Dviewer
-        asteroids={enrichedAsteroids}
-        onAsteroidsLoaded={(list) => setApiAsteroids(list)}
-        onAsteroidSimulated={(ast) => setSelectedAsteroid(ast)}
-        viewMode={viewMode}
-        filterTerm={filterTerm}
-        selectedAsteroid={enrichedSelectedAsteroid}
-      />
 
+
+<div className="fixed inset-0 flex overflow-hidden">
+  {showWhatIf && (
+    <WhatIfPanel onSimulate={handleSimulate} onViewStateChange={() => setShowWhatIf(false)} />
+  )}
+
+  <div className="w-[70%] h-full min-w-0 bg-gray-800 text-white overflow-hidden">
+    <Asteorid3Dviewer
+      asteroids={[...apiAsteroids, ...manualAsteroids]}
+      onAsteroidsLoaded={(list) => setApiAsteroids(list)}
+      onAsteroidSimulated={(ast) => setSelectedAsteroid(ast)}
+      viewMode={viewMode}
+      filterTerm={filterTerm}
+      selectedAsteroid={selectedAsteroid}
+    />
+  </div>
+
+  <div className="w-[30%] h-full min-w-0 bg-gray-200 text-black overflow-hidden">
+    {/* wrapper con scroll interno SOLO si hace falta */}
+    <div className="h-full overflow-auto">
       <SimulationOverlay
         asteroids={enrichedAsteroids}
         asteroid={enrichedSelectedAsteroid}
@@ -181,6 +189,9 @@ export default function Simulaciones() {
           .filter(a => !filterTerm || a.name.toLowerCase().includes(filterTerm.toLowerCase()))
           .length}
       />
-    </>
+    </div>
+  </div>
+</div>
+    
   );
 }
