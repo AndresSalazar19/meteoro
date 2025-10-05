@@ -12,7 +12,7 @@ export default function Simulaciones() {
     // Aquí podrías pasar simulationData a Asteorid3Dviewer si lo necesitas
     setShowWhatIf(false);
   };
-
+//si
   // Callback para volver a mostrar el panel si lo necesitas
   const handleShowPanel = () => setShowWhatIf(true);
 
