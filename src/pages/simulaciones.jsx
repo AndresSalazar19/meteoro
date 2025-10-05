@@ -155,7 +155,7 @@ export default function Simulaciones() {
   return (
 
 
-<div className="fixed inset-0 flex overflow-hidden">
+    <div className="w-screen h-[90%] flex overflow-hidden">
   {showWhatIf && (
     <WhatIfPanel onSimulate={handleSimulate} onViewStateChange={() => setShowWhatIf(false)} />
   )}

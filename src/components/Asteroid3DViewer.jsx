@@ -1056,7 +1056,7 @@ function Asteroid3DViewer({ onAsteroidsLoaded, onAsteroidSimulated, asteroids = 
  
   return (
     <div style={{ position: 'relative', width: '100vw', height: '100vh' }}>
-      <div ref={mountRef} style={{ width: '100%', height: '100%', overflow: 'hidden' }} />
+      <div ref={mountRef} style={{ width: '100%', height: '100%'}} />
       <div style={{
         position: 'fixed',
         bottom: '20px',
