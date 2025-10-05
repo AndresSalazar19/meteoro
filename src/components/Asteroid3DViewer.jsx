@@ -15,6 +15,8 @@ function Asteroid3DViewer({ onAsteroidsLoaded, onAsteroidSimulated, asteroids = 
   const earthRef = useRef(null);
   const earthRotationRef = useRef(true);
   const moonRotationRef = useRef(true);
+  const raycaster = new THREE.Raycaster();
+  const mouse = new THREE.Vector2();
   const cameraTransitionRef = useRef({ 
     active: false,
     fromPos: new THREE.Vector3(),
@@ -26,7 +28,7 @@ function Asteroid3DViewer({ onAsteroidsLoaded, onAsteroidSimulated, asteroids = 
   });
   const asteroidMeshesRef = useRef([]);
   const simulationModeRef = useRef('orbit');
-  const threatAsteroidRef = useRef(null);
+  const selectedAsteroidRef = useRef(null);
   const [isSimulated, setIsSimulated] = useState(false);
   const [isPaused, setIsPaused] = useState(false);
 
@@ -143,7 +145,7 @@ function Asteroid3DViewer({ onAsteroidsLoaded, onAsteroidSimulated, asteroids = 
       duration: 100
     };
 
-    threatAsteroidRef.current = asteroid;
+    selectedAsteroidRef.current = asteroid;
   };
 
   const initializeImpact = (asteroid) => {
@@ -181,7 +183,7 @@ function Asteroid3DViewer({ onAsteroidsLoaded, onAsteroidSimulated, asteroids = 
         ast.position.copy(ast.userData.orbitPoints[0]);
       }
     });
-    threatAsteroidRef.current = null;
+    selectedAsteroidRef.current = null;
     setIsSimulated(false);
     setIsPaused(false);
   }
@@ -451,10 +453,41 @@ function Asteroid3DViewer({ onAsteroidsLoaded, onAsteroidSimulated, asteroids = 
       cameraDistance = Math.max(100, Math.min(2000, cameraDistance));
     };
 
+    // Evento de click para asteroides
+    const onClick = (event) => {
+      if (isDragging) return; // evitar click si se está arrastrando
+      const rect = renderer.domElement.getBoundingClientRect();
+      mouse.x = ((event.clientX - rect.left) / rect.width) * 2 - 1;
+      mouse.y = -((event.clientY - rect.top) / rect.height) * 2 + 1;
+      raycaster.setFromCamera(mouse, cameraRef.current);
+      const intersects = raycaster.intersectObjects(asteroidMeshesRef.current);
+      if (intersects.length > 0) {
+        const asteroid = intersects[0].object;
+        if(asteroid.userData && asteroid.userData.type === 'asteroid') {
+          if (selectedAsteroidRef.current && selectedAsteroidRef.current !== asteroid) {
+            selectedAsteroidRef.current.material.emissive.setHex(0x000000);
+          }
+          asteroid.material.emissive = new THREE.Color(0xffff00); // color amarillo brillante
+          selectedAsteroidRef.current = asteroid;
+          onAsteroidSimulated({
+            name: asteroid.userData.name,
+            a: asteroid.userData.orbit.a,
+            e: asteroid.userData.orbit.e,
+            i: asteroid.userData.orbit.i,
+            diameterKm: asteroid.userData.orbit.size * 2,
+            velocityKms: asteroid.userData.orbit.velocity || null,
+            severity: asteroid.userData.orbit.severity || 'LOW'
+          });
+          
+        } 
+      }
+    }
+
     renderer.domElement.addEventListener('mousedown', onMouseDown);
     renderer.domElement.addEventListener('mousemove', onMouseMove);
     renderer.domElement.addEventListener('mouseup', onMouseUp);
     renderer.domElement.addEventListener('wheel', onWheel, { passive: false });
+    renderer.domElement.addEventListener('click', onClick);
 
     let animationId;
     const animate = () => {
@@ -480,8 +513,8 @@ function Asteroid3DViewer({ onAsteroidsLoaded, onAsteroidSimulated, asteroids = 
         }
       });
 
-      if(threatAsteroidRef.current){
-        const threat = threatAsteroidRef.current;
+      if(selectedAsteroidRef.current){
+        const threat = selectedAsteroidRef.current;
         const path = threat.userData.impactPath;
         if (path && path.progress < 1) {
           path.progress += 0.005;
@@ -528,10 +561,10 @@ function Asteroid3DViewer({ onAsteroidsLoaded, onAsteroidSimulated, asteroids = 
         if (t.progress >= t.duration) {
           t.active = false;
           simulationModeRef.current = "impact";
-          initializeImpact(threatAsteroidRef.current);
+          initializeImpact(selectedAsteroidRef.current);
         }
-      } else if (simulationModeRef.current === "impact" && threatAsteroidRef.current) {
-        const threat = threatAsteroidRef.current;
+      } else if (simulationModeRef.current === "impact" && selectedAsteroidRef.current) {
+        const threat = selectedAsteroidRef.current;
         const path = threat.userData.impactPath;
         if (path) {
           const dirToTarget = new THREE.Vector3().subVectors(path.target, threat.position).normalize();
@@ -561,6 +594,7 @@ function Asteroid3DViewer({ onAsteroidsLoaded, onAsteroidSimulated, asteroids = 
       renderer.domElement.removeEventListener('mousemove', onMouseMove);
       renderer.domElement.removeEventListener('mouseup', onMouseUp);
       renderer.domElement.removeEventListener('wheel', onWheel);
+      renderer.domElement.removeEventListener('click', onClick);
       renderer.dispose();
       if (renderer.domElement && mount.contains(renderer.domElement)) {
         mount.removeChild(renderer.domElement);
@@ -624,8 +658,8 @@ function Asteroid3DViewer({ onAsteroidsLoaded, onAsteroidSimulated, asteroids = 
         gap: '20px',
         zIndex: 10
       }}>
-        <Button onClick={() => onAsteroidClick(asteroidMeshesRef.current.find(a => a.userData.name === '(1999 GR6)'))}
-              variant='contained' startIcon={<PlayCircleIcon/>} color='success' disabled={isSimulated || isPaused}>
+        <Button onClick={() => onAsteroidClick(selectedAsteroidRef.current)}
+              variant='contained' startIcon={<PlayCircleIcon/>} color='success' disabled={isSimulated}>
                 Iniciar Simulación
             </Button>
             <Button onClick={reiniciar} variant='contained' startIcon={<ReplayIcon/>} color='error'>Reiniciar</Button>
