@@ -9,7 +9,7 @@ import PlayCircleIcon from '@mui/icons-material/PlayCircle';
 
 import * as THREE from 'three';
 
-function Asteroid3DViewer({ onAsteroidsLoaded, onAsteroidSimulated }) {
+function Asteroid3DViewer({ onAsteroidsLoaded, onAsteroidSimulated, asteroids = [], viewMode = 'all', filterTerm = '' }) {
   const mountRef = useRef(null);
   const cameraRef = useRef(null);
   const earthRef = useRef(null);
@@ -281,8 +281,9 @@ function Asteroid3DViewer({ onAsteroidsLoaded, onAsteroidSimulated }) {
           transparent: true,
           opacity: 0.4
         });
-        const orbitLine = new THREE.Line(orbitGeometry, orbitMaterial);
-        orbitGroup.add(orbitLine);
+  const orbitLine = new THREE.Line(orbitGeometry, orbitMaterial);
+  orbitLine.userData = { name: data.name };
+  orbitGroup.add(orbitLine);
 
         let physicalRadiusKm = Math.max(data.size, MIN_ASTEROID_RADIUS_KM);
         let radiusScene = physicalRadiusKm * ASTEROID_UNIFORM_SCALE;
@@ -299,6 +300,7 @@ function Asteroid3DViewer({ onAsteroidsLoaded, onAsteroidSimulated }) {
           type: 'asteroid',
           orbit: data,
           orbitPoints,
+          orbitLine,
           currentIndex: 0
         };
         asteroid.position.copy(orbitPoints[0]);
@@ -548,6 +550,26 @@ function Asteroid3DViewer({ onAsteroidsLoaded, onAsteroidSimulated }) {
       }
     };
   }, []);
+
+  // Effect: respond to viewMode / filterTerm changes by toggling visibility
+  React.useEffect(() => {
+    try {
+      const term = (filterTerm || '').toLowerCase();
+      asteroidMeshesRef.current.forEach(mesh => {
+        const data = mesh.userData?.orbit || {};
+        const name = (mesh.userData?.name || '').toLowerCase();
+        const source = data.source || 'api';
+        const matchesView = viewMode === 'all' || viewMode === source;
+        const matchesFilter = !term || name.includes(term);
+        const visible = matchesView && matchesFilter;
+        mesh.visible = visible;
+        if (mesh.userData?.orbitLine) mesh.userData.orbitLine.visible = visible;
+      });
+    } catch (e) {
+      // silence any errors during live updates
+      console.warn('Error applying asteroid visibility filter', e);
+    }
+  }, [viewMode, filterTerm, asteroids]);
  
   return (
     <>

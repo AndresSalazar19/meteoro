@@ -50,6 +50,8 @@ export default function Simulaciones() {
       <Asteorid3Dviewer
         onAsteroidsLoaded={(list) => setApiAsteroids(list)}
         onAsteroidSimulated={(ast) => setSelectedAsteroid(ast)}
+        viewMode={viewMode}
+        filterTerm={filterTerm}
       />
 
       <SimulationOverlay
