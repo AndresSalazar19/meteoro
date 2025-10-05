@@ -15,6 +15,15 @@ function Asteroid3DViewer({ onAsteroidsLoaded, onAsteroidSimulated, asteroids = 
   const earthRef = useRef(null);
   const earthRotationRef = useRef(true);
   const moonRotationRef = useRef(true);
+    // Fog sphere (versión inicial) y nuevo sistema de humo basado en sprites
+  const fogRef = useRef(null); // (Opcional) esfera suave
+  const fogStateRef = useRef({ active: false, progress: 0, duration: 180, maxOpacity: 0.45 });
+  // Grupo de sprites de humo
+  const smokeGroupRef = useRef(null);
+  const smokeStateRef = useRef({ active: false, progress: 0, duration: 240 });
+  // Materiales de la Tierra (original / impactado)
+  const earthOriginalMaterialRef = useRef(null);
+  const earthImpactedMaterialRef = useRef(null);
   const cameraTransitionRef = useRef({ 
     active: false,
     fromPos: new THREE.Vector3(),
@@ -182,6 +191,23 @@ function Asteroid3DViewer({ onAsteroidsLoaded, onAsteroidSimulated, asteroids = 
       }
     });
     threatAsteroidRef.current = null;
+    // Restaurar material original de la Tierra
+    if (earthOriginalMaterialRef.current && earthRef.current) {
+      earthRef.current.material = earthOriginalMaterialRef.current;
+      earthRef.current.material.needsUpdate = true;
+    }
+    // Apagar humo
+    smokeStateRef.current.active = false;
+    if (smokeGroupRef.current) {
+      smokeGroupRef.current.visible = false;
+      smokeGroupRef.current.children.forEach(sp => sp.material.opacity = 0);
+    }
+    // Apagar fog sphere
+    fogStateRef.current.active = false;
+    if (fogRef.current) {
+      fogRef.current.visible = false;
+      fogRef.current.material.opacity = 0;
+    }
     setIsSimulated(false);
     setIsPaused(false);
   }
@@ -197,6 +223,34 @@ function Asteroid3DViewer({ onAsteroidsLoaded, onAsteroidSimulated, asteroids = 
       earthRotationRef.current = true;
       moonRotationRef.current = true;
       setIsPaused(false);
+    }
+  };
+
+  // Función caso 3
+  const tercer_Impacto = () => {
+    // Cambio de material de la Tierra
+    if (earthRef.current && earthImpactedMaterialRef.current) {
+      earthRef.current.material = earthImpactedMaterialRef.current;
+      earthRef.current.material.needsUpdate = true;
+    }
+
+    // Activar humo principal
+    if (smokeGroupRef.current) {
+      smokeStateRef.current.active = true;
+      smokeStateRef.current.progress = 0;
+      smokeGroupRef.current.visible = true;
+      smokeGroupRef.current.children.forEach(sprite => {
+        sprite.material.opacity = 0;
+        const { normal } = sprite.userData;
+        // Reposicionar ligeramente para reiniciar el efecto
+        sprite.position.copy(normal.clone().multiplyScalar(earthRef.current ? earthRef.current.geometry.parameters.radius * (1.05 + Math.random()*0.02) : 65));
+      });
+    } else if (fogRef.current) {
+      // Fallback a esfera difusa
+      fogStateRef.current.active = true;
+      fogStateRef.current.progress = 0;
+      fogRef.current.visible = true;
+      fogRef.current.material.opacity = 0;
     }
   };
 
@@ -242,6 +296,22 @@ function Asteroid3DViewer({ onAsteroidsLoaded, onAsteroidSimulated, asteroids = 
         earth.userData = { name: 'Earth', type: 'planet', radius: 6371 };
         earthSystem.add(earth);
         earthRef.current = earth;
+        earthOriginalMaterialRef.current = earthMaterial;
+        // Intentar cargar textura específica de impacto si existe
+        textureLoader.load(
+          '/2k_makemake_fictional.jpg',
+          (impactTex) => {
+            earthImpactedMaterialRef.current = new THREE.MeshPhongMaterial({
+              map: impactTex,
+              emissive: 0x441100,
+              emissiveIntensity: 0.8,
+              specular: 0x111111,
+              shininess: 6
+            });
+          },
+          undefined,
+          () => { /* si falla, se mantiene la versión tintada */ }
+        );
       },
       undefined,
       () => {
@@ -256,6 +326,21 @@ function Asteroid3DViewer({ onAsteroidsLoaded, onAsteroidSimulated, asteroids = 
         earth.userData = { name: 'Earth', type: 'planet', radius: 6371 };
         earthSystem.add(earth);
         earthRef.current = earth;
+        // Intentar igualmente cargar textura específica
+        textureLoader.load(
+          '/2k_makemake_fictional.jpg',
+          (impactTex) => {
+            earthImpactedMaterialRef.current = new THREE.MeshPhongMaterial({
+              map: impactTex,
+              emissive: 0x441100,
+              emissiveIntensity: 0.8,
+              specular: 0x111111,
+              shininess: 6
+            });
+          },
+          undefined,
+          () => {}
+        );
       }
     );
 
@@ -268,6 +353,94 @@ function Asteroid3DViewer({ onAsteroidsLoaded, onAsteroidSimulated, asteroids = 
     });
     const atmosphere = new THREE.Mesh(atmosphereGeometry, atmosphereMaterial);
     earthSystem.add(atmosphere);
+
+    // --- Fog sphere (opcional) ---
+    const fogGeometry = new THREE.SphereGeometry(R_EARTH_SCENE * 1.25, 64, 64);
+    const fogMaterial = new THREE.MeshBasicMaterial({
+      color: 0xffffff,
+      transparent: true,
+      opacity: 0,
+      depthWrite: false,
+      blending: THREE.AdditiveBlending,
+      side: THREE.BackSide
+    });
+    const fogSphere = new THREE.Mesh(fogGeometry, fogMaterial);
+    fogSphere.visible = false;
+    earthSystem.add(fogSphere);
+    fogRef.current = fogSphere;
+
+    // --- Procedural smoke sprites ---
+    const generateSmokeTexture = () => {
+      const size = 128;
+      const canvas = document.createElement('canvas');
+      canvas.width = size; canvas.height = size;
+      const ctx = canvas.getContext('2d');
+      // Fondo transparente
+      ctx.clearRect(0,0,size,size);
+      // Dibujar varias nubes circulares semi-translúcidas superpuestas para bordes irregulares
+      const puffs = 10;
+      for (let i=0;i<puffs;i++) {
+        const r = size * (0.25 + Math.random()*0.35);
+        const x = size/2 + (Math.random()-0.5)*size*0.3;
+        const y = size/2 + (Math.random()-0.5)*size*0.3;
+        const g = ctx.createRadialGradient(x,y, r*0.1, x,y,r);
+        const alpha = 0.12 + Math.random()*0.18;
+        g.addColorStop(0, `rgba(255,255,255,${alpha*1.2})`);
+        g.addColorStop(0.4, `rgba(255,255,255,${alpha})`);
+        g.addColorStop(1, 'rgba(255,255,255,0)');
+        ctx.fillStyle = g;
+        ctx.beginPath();
+        ctx.arc(x,y,r,0,Math.PI*2);
+        ctx.fill();
+      }
+      const tex = new THREE.CanvasTexture(canvas);
+      tex.minFilter = THREE.LinearMipMapLinearFilter;
+      tex.magFilter = THREE.LinearFilter;
+      tex.wrapS = tex.wrapT = THREE.ClampToEdgeWrapping;
+      return tex;
+    };
+
+    const createSmokeCloud = () => {
+      const group = new THREE.Group();
+      const texture = generateSmokeTexture();
+      const SPRITES = 42; // cantidad de parches de humo
+      for (let i=0;i<SPRITES;i++) {
+        const material = new THREE.SpriteMaterial({
+          map: texture,
+            transparent: true,
+            depthWrite: false,
+            depthTest: true,
+            opacity: 0,
+            blending: THREE.NormalBlending,
+            color: 0xffffff
+        });
+        const sprite = new THREE.Sprite(material);
+        // Distribuir alrededor de la esfera con una ligera variación radial
+        const theta = Math.acos(2*Math.random()-1); // polar
+        const phi = 2*Math.PI*Math.random(); // azimut
+        const normal = new THREE.Vector3(
+          Math.sin(theta)*Math.cos(phi),
+          Math.cos(theta),
+          Math.sin(theta)*Math.sin(phi)
+        );
+        const baseRadius = R_EARTH_SCENE * (1.05 + Math.random()*0.12);
+        sprite.position.copy(normal.clone().multiplyScalar(baseRadius));
+        const baseScale = R_EARTH_SCENE * 0.7 * (0.6 + Math.random()*0.8);
+        sprite.scale.set(baseScale, baseScale, 1);
+        sprite.userData = {
+          normal,
+          baseScale,
+          seed: Math.random(),
+          radialOffset: R_EARTH_SCENE * (0.15 + Math.random()*0.25)
+        };
+        group.add(sprite);
+      }
+      group.visible = false;
+      earthSystem.add(group);
+      smokeGroupRef.current = group;
+    };
+
+    createSmokeCloud();
 
     const orbitGroup = new THREE.Group();
   scene.add(orbitGroup);
@@ -514,6 +687,8 @@ function Asteroid3DViewer({ onAsteroidsLoaded, onAsteroidSimulated, asteroids = 
           path.impactDone = true;
           simulationModeRef.current = "orbit";
           earthRotationRef.current = false;
+          // Llamar a la función de tercer impacto
+          tercer_Impacto();
         }
       }
 
@@ -549,6 +724,59 @@ function Asteroid3DViewer({ onAsteroidsLoaded, onAsteroidSimulated, asteroids = 
         cameraRef.current.lookAt(0, 0, 0);
       }
         
+      // Animación de esfera de fog (solo si se activa explícitamente)
+      if (fogStateRef.current.active && fogRef.current) {
+        const f = fogStateRef.current;
+        f.progress++;
+        const half = f.duration / 2;
+        let opacity;
+        if (f.progress <= half) {
+          opacity = (f.progress / half) * f.maxOpacity;
+        } else {
+          opacity = Math.max(0, (1 - (f.progress - half) / half) * f.maxOpacity);
+        }
+        fogRef.current.material.opacity = opacity;
+        if (f.progress >= f.duration) {
+          f.active = false; f.progress = 0; fogRef.current.visible = false; fogRef.current.material.opacity = 0;
+        }
+      }
+
+      // Animación del humo sprite (efecto principal)
+      if (smokeStateRef.current.active && smokeGroupRef.current) {
+        const s = smokeStateRef.current;
+        s.progress++;
+        const t = s.progress / s.duration; // 0..1
+        smokeGroupRef.current.children.forEach(sprite => {
+          const ud = sprite.userData;
+          // Curva de opacidad: ease in (0-0.35), pico (0.35-0.55), out (0.55-1)
+          let o;
+          if (t < 0.35) o = t / 0.35; else if (t < 0.55) o = 1; else o = Math.max(0, 1 - (t - 0.55)/0.45);
+          // Variación por seed para que no todo alcance 1
+          o *= 0.6 + ud.seed * 0.4;
+          sprite.material.opacity = o;
+          // Escala pulsante
+          const pulse = 0.8 + Math.sin((t + ud.seed) * Math.PI * 2) * 0.25;
+          const growth = 1 + t * 0.9; // expansión global
+          const scale = ud.baseScale * pulse * growth;
+          sprite.scale.set(scale, scale, 1);
+          // Movimiento radial hacia afuera + ligera turbulencia
+          const radial = R_EARTH_SCENE * 1.05 + t * ud.radialOffset;
+          const jitterAmp = 6;
+          const jitter = new THREE.Vector3(
+            (Math.random()-0.5)*jitterAmp*0.15,
+            (Math.random()-0.5)*jitterAmp*0.15,
+            (Math.random()-0.5)*jitterAmp*0.15
+          );
+          sprite.position.copy(ud.normal.clone().multiplyScalar(radial)).add(jitter);
+          // Rotación aleatoria lenta
+          sprite.material.rotation += 0.001 + ud.seed * 0.004;
+        });
+        if (s.progress >= s.duration) {
+          s.active = false; s.progress = 0; smokeGroupRef.current.visible = false;
+          smokeGroupRef.current.children.forEach(sp => sp.material.opacity = 0);
+        }
+      }
+
       renderer.render(scene, cameraRef.current);
       animationId = requestAnimationFrame(animate);
     };
