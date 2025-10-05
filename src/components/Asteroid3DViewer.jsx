@@ -9,7 +9,7 @@ import PlayCircleIcon from '@mui/icons-material/PlayCircle';
 
 import * as THREE from 'three';
 
-const Asteroid3DViewer = () => {
+function Asteroid3DViewer({ onAsteroidsLoaded, onAsteroidSimulated }) {
   const mountRef = useRef(null);
   const cameraRef = useRef(null);
   const earthRef = useRef(null);
@@ -41,6 +41,19 @@ const Asteroid3DViewer = () => {
     // Se ignora el estado de pausa al simular
     setIsPaused(false);
     setIsSimulated(true);
+
+
+       if (onAsteroidSimulated) {
+      onAsteroidSimulated({
+        name: asteroid.userData.name,
+        a: asteroid.userData.orbit.a,
+        e: asteroid.userData.orbit.e,
+        i: asteroid.userData.orbit.i,
+        diameterKm: asteroid.userData.orbit.size * 2,
+        velocityKms: asteroid.userData.orbit.velocity || null,
+        severity: asteroid.userData.orbit.severity || 'LOW'
+      });
+    }
 
     // Dirección desde el asteroide hacia el objetivo (origen)
     const directionToOrigin = new THREE.Vector3().subVectors(new THREE.Vector3(0,0,0), asteroid.position).normalize();
@@ -298,63 +311,77 @@ const Asteroid3DViewer = () => {
     const API_KEY = import.meta.env.VITE_NASA_API_KEY || '2KzpzDksQWT2D2csD9Ja9wrdX8ruTcS290hH2mBK';
     const FEED_URL = `https://api.nasa.gov/neo/rest/v1/feed?start_date=2025-12-19&end_date=2025-12-26&api_key=${API_KEY}`;
 
-    const fetchAsteroids = async () => {
-      try {
-        const res = await fetch(FEED_URL, { signal: controller.signal });
-        if (!res.ok) throw new Error('Error al obtener feed NEO');
-        const feed = await res.json();
-        const byDate = feed.near_earth_objects || {};
-        const neoList = [];
-        Object.values(byDate).forEach((arr) => {
-          if (Array.isArray(arr)) neoList.push(...arr);
-        });
-        
-        // CORRECCIÓN: Forzar HTTPS en todos los links
-        const links = Array.from(
-          new Set(
-            neoList
-              .map(n => n.links?.self)
-              .filter(Boolean)
-              .map(url => url.replace('http://', 'https://'))
-          )
-        );
+  const fetchAsteroids = async () => {
+    try {
+      const res = await fetch(FEED_URL, { signal: controller.signal });
+      if (!res.ok) throw new Error('Error al obtener feed NEO');
+      const feed = await res.json();
+      const byDate = feed.near_earth_objects || {};
+      const neoList = [];
+      Object.values(byDate).forEach((arr) => {
+        if (Array.isArray(arr)) neoList.push(...arr);
+      });
+      
+      const links = Array.from(
+        new Set(
+          neoList
+            .map(n => n.links?.self)
+            .filter(Boolean)
+            .map(url => url.replace('http://', 'https://'))
+        )
+      );
 
-        const fetchPromises = links.map(async (url) => {
-          try {
-            const r = await fetch(url, { signal: controller.signal });
-            if (!r.ok) return null;
-            const neo = await r.json();
-            const orbital = neo.orbital_data || {};
-            const kmData = neo.estimated_diameter?.kilometers;
-            const dMin = kmData?.estimated_diameter_min;
-            const dMax = kmData?.estimated_diameter_max;
-            const avgDiameterKm = (dMin + dMax) / 2;
-            const radiusKm = avgDiameterKm / 2;
-            return {
-              name: neo.name || neo.designation || 'NEO',
-              a: parseFloat(orbital.semi_major_axis) || 1,
-              e: parseFloat(orbital.eccentricity) || 0,
-              i: parseFloat(orbital.inclination) || 0,
-              size: typeof radiusKm === 'number' ? radiusKm : 0.05,
-              color: randomColor()
-            };
-          } catch {
-            return null;
-          }
-        });
+      const fetchPromises = links.map(async (url) => {
+        try {
+          const r = await fetch(url, { signal: controller.signal });
+          if (!r.ok) return null;
+          const neo = await r.json();
+          const orbital = neo.orbital_data || {};
+          const kmData = neo.estimated_diameter?.kilometers;
+          const dMin = kmData?.estimated_diameter_min;
+          const dMax = kmData?.estimated_diameter_max;
+          const avgDiameterKm = (dMin + dMax) / 2;
+          const radiusKm = avgDiameterKm / 2;
+          
+          // Calcular velocidad aproximada (puedes ajustar esto)
+          const velocity = parseFloat(orbital.orbital_period) 
+            ? (2 * Math.PI * parseFloat(orbital.semi_major_axis) * 149597870.7) / 
+              (parseFloat(orbital.orbital_period) * 365.25 * 86400)
+            : null;
 
-        const results = await Promise.all(fetchPromises);
-        const detailed = results.filter(r => r !== null);
-        
-        if (detailed.length) {
-          addAsteroidsToScene(detailed);
+          return {
+            name: neo.name || neo.designation || 'NEO',
+            a: parseFloat(orbital.semi_major_axis) || 1,
+            e: parseFloat(orbital.eccentricity) || 0,
+            i: parseFloat(orbital.inclination) || 0,
+            size: typeof radiusKm === 'number' ? radiusKm : 0.05,
+            velocity: velocity,
+            color: randomColor(),
+            source: 'api',
+            severity: neo.is_potentially_hazardous_asteroid ? 'HIGH' : 'LOW'
+          };
+        } catch {
+          return null;
         }
-      } catch (e) {
-        if (e.name !== 'AbortError') {
-          console.error('Error obteniendo asteroides:', e);
+      });
+
+      const results = await Promise.all(fetchPromises);
+      const detailed = results.filter(r => r !== null);
+      
+      if (detailed.length) {
+        addAsteroidsToScene(detailed);
+        
+        // Notificar al padre con la lista completa de asteroides
+        if (onAsteroidsLoaded) {
+          onAsteroidsLoaded(detailed);
         }
       }
-    };
+    } catch (e) {
+      if (e.name !== 'AbortError') {
+        console.error('Error obteniendo asteroides:', e);
+      }
+    }
+  };
 
     fetchAsteroids();
 

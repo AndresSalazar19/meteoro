@@ -1,6 +1,7 @@
 import React from 'react';
 
 const SimulationOverlay = ({ 
+  asteroids = [],
   asteroid, 
   onGoBack, 
   viewMode, 
@@ -105,8 +106,32 @@ const SimulationOverlay = ({
             fontSize: '0.9em', marginBottom: '10px'
           }}
         />
-        <p style={{ marginTop: '15px', fontSize: '0.9em' }}>Total de asteroides: {totalCount}</p>
-        <p style={{ fontSize: '0.9em' }}>Asteroides filtrados: {filteredCount}</p>
+        {/* Compute counts from asteroids if parent didn't provide them */}
+        {typeof totalCount === 'number' ? (
+          <p style={{ marginTop: '15px', fontSize: '0.9em' }}>Total de asteroides: {totalCount}</p>
+        ) : (
+          <p style={{ marginTop: '15px', fontSize: '0.9em' }}>Total de asteroides: {asteroids.length}</p>
+        )}
+        {typeof filteredCount === 'number' ? (
+          <p style={{ fontSize: '0.9em' }}>Asteroides filtrados: {filteredCount}</p>
+        ) : (
+          <p style={{ fontSize: '0.9em' }}>Asteroides filtrados: {asteroids
+            .filter(a => viewMode === 'all' || a.source === viewMode)
+            .filter(a => !filterTerm || a.name.toLowerCase().includes(filterTerm.toLowerCase())).length}</p>
+        )}
+
+        {/* Listado rápido de asteroides filtrados (read-only) */}
+        <div style={{ marginTop: '10px', maxHeight: '200px', overflowY: 'auto' }}>
+          {asteroids
+            .filter(a => viewMode === 'all' || a.source === viewMode)
+            .filter(a => !filterTerm || a.name.toLowerCase().includes(filterTerm.toLowerCase()))
+            .map((a, idx) => (
+              <div key={a.name + idx} style={{ padding: '6px 8px', borderBottom: '1px solid #444', color: '#ddd' }}>
+                <div style={{ fontSize: '0.95em', fontWeight: '600' }}>{a.name}</div>
+                <div style={{ fontSize: '0.8em', color: '#bbb' }}>{a.source || 'api'} · a: {a.a?.toFixed?.(2) ?? a.a} AU · d: {a.size ? (a.size*2).toFixed(3)+' km' : 'N/A'}</div>
+              </div>
+            ))}
+        </div>
       </div>
 
 
