@@ -28,14 +28,16 @@ const Asteroid3DViewer = () => {
       console.log('Asteroide no encontrado');
       return;
     }
-    
-    const direction = new THREE.Vector3().subVectors(
-      new THREE.Vector3(0,0,0), // punto de impacto
-      asteroid.position
-    ).normalize();
-
-    const cameraTargetPos = asteroid.position.clone().add(direction.clone().multiplyScalar(-10)); // 50 unidades detrás
-    const cameraTargetLook = new THREE.Vector3(0, 0, 0); // mira al punto de impacto
+    // Dirección desde el asteroide hacia el objetivo (origen)
+    const directionToOrigin = new THREE.Vector3().subVectors(new THREE.Vector3(0,0,0), asteroid.position).normalize();
+    // Determinar un offset dinámico en función del tamaño del asteroide
+  const asteroidRadius = asteroid.geometry?.parameters?.radius || (asteroid.userData?.size ? asteroid.userData.size * 100 : 10);
+  // Alejamos un poco más para asegurar que la Tierra siga siendo visible mientras seguimos la trayectoria
+  const distanceBehind = Math.max(asteroidRadius * 20, 400); // distancia mínima aumentada
+    // Posicionar la cámara detrás del asteroide (opuesto a la dirección hacia el origen)
+    const cameraTargetPos = asteroid.position.clone().add(directionToOrigin.clone().multiplyScalar(-distanceBehind));
+    // Mirar al propio asteroide (no al origen) para que sea visible durante la transición
+    const cameraTargetLook = asteroid.position.clone();
 
     // Inicializa transición de cámara
     cameraTransitionRef.current = {
@@ -501,11 +503,17 @@ const Asteroid3DViewer = () => {
           const intensity = path.progress;
           threat.material.color.setRGB(1, 1 - intensity, 1 - intensity);
 
-          // Cámara detrás del meteorito
-          const direction = new THREE.Vector3().subVectors(path.target, path.start).normalize();
-          const cameraOffset = direction.clone().multiplyScalar(-10); // distancia detrás
+          // Cámara detrás del meteorito: calcular dirección desde la posición actual hacia el objetivo
+          const dirToTarget = new THREE.Vector3().subVectors(path.target, threat.position).normalize();
+          // Estimar radio del asteroide para un offset apropiado
+          const astRadius = threat.geometry?.parameters?.radius || (threat.userData?.size ? threat.userData.size * 100 : 10);
+          // Alejar un poco más la cámara para incluir la Tierra en la vista.
+          const offsetDist = Math.max(astRadius * 12, 400); // distancia mínima ampliada
+          const cameraOffset = dirToTarget.clone().multiplyScalar(-offsetDist);
           cameraRef.current.position.copy(threat.position.clone().add(cameraOffset));
-          cameraRef.current.lookAt(path.target);
+          // En lugar de mirar exactamente al meteorito, mirar ligeramente hacia la Tierra (punto entre meteoro y centro)
+          const lookAtPoint = threat.position.clone().lerp(path.target, 0.15);
+          cameraRef.current.lookAt(lookAtPoint);
 
         } else if (path && path.progress >= 1 && !path.impactDone) {
           console.log('¡IMPACTO!');
@@ -536,11 +544,14 @@ const Asteroid3DViewer = () => {
         const threat = threatAsteroidRef.current;
         const path = threat.userData.impactPath;
         if (path) {
-          // Cámara detrás del meteorito
-          const direction = new THREE.Vector3().subVectors(path.target, path.start).normalize();
-          const cameraOffset = direction.clone().multiplyScalar(-10);
+          // En modo impacto, mantener la cámara detrás del meteorito y enfocando al propio meteorito
+          const dirToTarget = new THREE.Vector3().subVectors(path.target, threat.position).normalize();
+          const astRadius = threat.geometry?.parameters?.radius || (threat.userData?.size ? threat.userData.size * 100 : 10);
+          const offsetDist = Math.max(astRadius * 12, 350);
+          const cameraOffset = dirToTarget.clone().multiplyScalar(-offsetDist);
           cameraRef.current.position.copy(threat.position.clone().add(cameraOffset));
-          cameraRef.current.lookAt(path.target);
+          const lookAtPoint = threat.position.clone().lerp(path.target, 0.15);
+          cameraRef.current.lookAt(lookAtPoint);
         }
       } else {
         // Modo libre (órbita)
