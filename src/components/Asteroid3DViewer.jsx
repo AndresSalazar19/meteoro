@@ -1,6 +1,12 @@
 // src/components/Asteroid3DViewer.jsx
 
 import React, { useEffect, useRef, useState } from 'react';
+import { Button } from '@mui/material';
+import PlayArrowIcon from '@mui/icons-material/PlayArrow';
+import ReplayIcon from '@mui/icons-material/Replay';
+import PauseIcon from '@mui/icons-material/Pause';
+import PlayCircleIcon from '@mui/icons-material/PlayCircle';
+
 import * as THREE from 'three';
 
 const Asteroid3DViewer = () => {
@@ -22,18 +28,27 @@ const Asteroid3DViewer = () => {
   const asteroidMeshesRef = useRef([]);
   const simulationModeRef = useRef('orbit');
   const threatAsteroidRef = useRef(null);
+  const [isSimulated, setIsSimulated] = useState(false);
+  const [isPaused, setIsPaused] = useState(false);
 
   const onAsteroidClick = (asteroid) => {
     if (!asteroid) {
       console.log('Asteroide no encontrado');
       return;
     }
+
+    // Si ya se inició la simulación, no se permite re-simular
+    if (isSimulated) return;
+    // Se ignora el estado de pausa al simular
+    setIsPaused(false);
+    setIsSimulated(true);
+
     // Dirección desde el asteroide hacia el objetivo (origen)
     const directionToOrigin = new THREE.Vector3().subVectors(new THREE.Vector3(0,0,0), asteroid.position).normalize();
     // Determinar un offset dinámico en función del tamaño del asteroide
-  const asteroidRadius = asteroid.geometry?.parameters?.radius || (asteroid.userData?.size ? asteroid.userData.size * 100 : 10);
-  // Alejamos un poco más para asegurar que la Tierra siga siendo visible mientras seguimos la trayectoria
-  const distanceBehind = Math.max(asteroidRadius * 20, 400); // distancia mínima aumentada
+   const asteroidRadius = asteroid.geometry?.parameters?.radius || (asteroid.userData?.size ? asteroid.userData.size * 100 : 10);
+    // Alejamos un poco más para asegurar que la Tierra siga siendo visible mientras seguimos la trayectoria
+   const distanceBehind = Math.max(asteroidRadius * 20, 400); // distancia mínima aumentada
     // Posicionar la cámara detrás del asteroide (opuesto a la dirección hacia el origen)
     const cameraTargetPos = asteroid.position.clone().add(directionToOrigin.clone().multiplyScalar(-distanceBehind));
     // Mirar al propio asteroide (no al origen) para que sea visible durante la transición
@@ -81,6 +96,7 @@ const Asteroid3DViewer = () => {
     simulationModeRef.current = "orbit";
     // Reiniciar la Tierra a rotación normal
     earthRotationRef.current = true;
+    moonRotationRef.current = true;
 
     // Reiniciar asteroides
     asteroidMeshesRef.current.forEach(ast => {
@@ -93,6 +109,8 @@ const Asteroid3DViewer = () => {
       }
     });
     threatAsteroidRef.current = null;
+    setIsSimulated(false);
+    setIsPaused(false);
   }
 
   const pauseContinue = () => {
@@ -101,10 +119,12 @@ const Asteroid3DViewer = () => {
       simulationModeRef.current = "paused";
       earthRotationRef.current = false;
       moonRotationRef.current = false;
+      setIsPaused(true);
     } else if (simulationModeRef.current === "paused") {
       simulationModeRef.current = "orbit";
       earthRotationRef.current = true;
       moonRotationRef.current = true;
+      setIsPaused(false);
     }
   }
 
@@ -599,11 +619,12 @@ const Asteroid3DViewer = () => {
             gap: '20px',
             zIndex: 10
         }}>
-            <button onClick={() => onAsteroidClick(asteroidMeshesRef.current.find(a => a.userData.name === '(1999 GR6)'))}>
+            <Button onClick={() => onAsteroidClick(asteroidMeshesRef.current.find(a => a.userData.name === '(1999 GR6)'))}
+              variant='contained' startIcon={<PlayCircleIcon/>} color='success' disabled={isSimulated || isPaused}>
                 Iniciar Simulación
-            </button>
-            <button onClick={reiniciar}>Reiniciar</button>
-            <button onClick={pauseContinue}>Pausar</button>
+            </Button>
+            <Button onClick={reiniciar} variant='contained' startIcon={<ReplayIcon/>} color='error'>Reiniciar</Button>
+            <Button onClick={pauseContinue} variant='contained' startIcon={<PauseIcon/>} color="warning" disabled={isSimulated}>Pausar</Button>
         </div>
    </>
   );
