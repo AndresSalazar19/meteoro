@@ -584,17 +584,27 @@ const Asteroid3DViewer = () => {
  
   return (
     <>
-    <div>
-      <button onClick={() => onAsteroidClick(asteroidMeshesRef.current.find(a => a.userData.name === '(1999 GR6)'))}>Iniciar Simulación</button>
-      <br/>
-      <button onClick={reiniciar}>Reiniciar</button>
-      <br/>
-      <button onClick={pauseContinue}>Pausar</button>
-    </div>
    <div
       ref={mountRef}
       style={{ width: '100vw', height: '100vh', overflow: 'hidden' }}
     />
+    {/* Botones de acción inferiores */}
+        <div style={{
+            position: 'absolute',
+            bottom: '20px',
+            left: '0',
+            width: '100%',
+            display: 'flex',
+            justifyContent: 'center',
+            gap: '20px',
+            zIndex: 10
+        }}>
+            <button onClick={() => onAsteroidClick(asteroidMeshesRef.current.find(a => a.userData.name === '(1999 GR6)'))}>
+                Iniciar Simulación
+            </button>
+            <button onClick={reiniciar}>Reiniciar</button>
+            <button onClick={pauseContinue}>Pausar</button>
+        </div>
    </>
   );
 };
