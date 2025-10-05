@@ -1,4 +1,45 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
+// ====== Helper para enriquecer asteroides ======
+const DEFAULT_DENSITY = 3000; // kg/m^3
+const computeEnergyMt = (radiusKm, velocityKmS, density = DEFAULT_DENSITY) => {
+  if (!Number.isFinite(radiusKm) || radiusKm <= 0 || !Number.isFinite(velocityKmS) || velocityKmS <= 0) return 0;
+  const r_m = radiusKm * 1000;
+  const v_ms = velocityKmS * 1000;
+  const volume_m3 = (4 / 3) * Math.PI * Math.pow(r_m, 3);
+  const mass_kg = density * volume_m3;
+  const energyJ = 0.5 * mass_kg * Math.pow(v_ms, 2);
+  return energyJ / 4.184e15; // -> Megatones TNT
+};
+
+const severityFromEnergyMt = (energyMt) => {
+  if (energyMt >= 1000) return { key: "E3_CATASTROPHIC", label: "Catastrófica" };
+  if (energyMt >= 10)   return { key: "E2_SEVERE",       label: "Severa" };
+  if (energyMt >= 0.1)  return { key: "E1_SIGNIFICANT",  label: "Significativa" };
+  return { key: "E0_MINI",        label: "Mínima" };
+};
+
+const combineDangerLevel = (severityFlag, energyClassKey) => {
+  const isPHA = severityFlag === 'HIGH';
+  if (energyClassKey === "E3_CATASTROPHIC") return { nivel: "Extremo",  desc: "Impacto con efectos globales" };
+  if (energyClassKey === "E2_SEVERE")       return { nivel: isPHA ? "Alto" : "Moderado", desc: isPHA ? "Riesgo regional severo" : "Riesgo regional relevante" };
+  if (energyClassKey === "E1_SIGNIFICANT")  return { nivel: isPHA ? "Moderado" : "Bajo",  desc: isPHA ? "Daños de ciudad probables" : "Daños de ciudad posibles" };
+  return { nivel: "Bajo", desc: "Airburst/daños locales menores" };
+};
+
+function enrichAsteroid(a) {
+  const radiusKm = Number(a.size) || 0;
+  const velocityKmS = Number(a.velocityKms || a.velocity) || 0;
+  const energyMt = computeEnergyMt(radiusKm, velocityKmS);
+  const eClass = severityFromEnergyMt(energyMt);
+  const danger = combineDangerLevel(a.severity, eClass.key);
+  return {
+    ...a,
+    energyMt,
+    severity_con_respecto_a_energya: eClass.label,
+    danger4: danger.nivel,
+    danger_desc: danger.desc
+  };
+}
 import { useLocation, useNavigate } from 'react-router-dom'; // Importa useLocation y useNavigate
 import Asteorid3Dviewer from "../components/Asteroid3DViewer";
 import WhatIfPanel from "../components/WhatIfPanel";
@@ -100,34 +141,45 @@ export default function Simulaciones() {
   }, [asteroidIdToSelectFromAPI, apiAsteroids]);
 
 
+  // Enriquecer la lista de asteroides
+  const enrichedAsteroids = useMemo(() => ([...apiAsteroids, ...manualAsteroids].map(enrichAsteroid)), [apiAsteroids, manualAsteroids]);
+
+  // Enriquecer el seleccionado (si existe)
+  const enrichedSelectedAsteroid = useMemo(() => {
+    if (!selectedAsteroid) return null;
+    // Buscar por nombre (idealmente deberías usar un id único)
+    const found = enrichedAsteroids.find(a => a.name === selectedAsteroid.name);
+    return found || enrichAsteroid(selectedAsteroid);
+  }, [selectedAsteroid, enrichedAsteroids]);
+
   return (
     <>
       {showWhatIf && (
         <WhatIfPanel onSimulate={handleSimulate} onViewStateChange={() => setShowWhatIf(false)} />
       )}
       <Asteorid3Dviewer
-        asteroids={[...apiAsteroids, ...manualAsteroids]}
+        asteroids={enrichedAsteroids}
         onAsteroidsLoaded={(list) => setApiAsteroids(list)}
-        onAsteroidSimulated={(ast) => setSelectedAsteroid(ast)} // Esto ya seleccionaba un asteroide si era simulado
+        onAsteroidSimulated={(ast) => setSelectedAsteroid(ast)}
         viewMode={viewMode}
         filterTerm={filterTerm}
-        selectedAsteroid={selectedAsteroid} // <-- Pasa el asteroide seleccionado para que el viewer lo resalte/enfoque
+        selectedAsteroid={enrichedSelectedAsteroid}
       />
 
       <SimulationOverlay
-        asteroids={[...apiAsteroids, ...manualAsteroids]}
-        asteroid={selectedAsteroid} // <-- Pasa el asteroide seleccionado, esto
-        onSelectAsteroid={setSelectedAsteroid} // <-- Pasa la función para actualizar el asteroide seleccionado
+        asteroids={enrichedAsteroids}
+        asteroid={enrichedSelectedAsteroid}
+        onSelectAsteroid={setSelectedAsteroid}
         onGoBack={handleShowPanel}
         viewMode={viewMode}
         setViewMode={setViewMode}
         filterTerm={filterTerm}
         setFilterTerm={setFilterTerm}
-        totalCount={[...apiAsteroids, ...manualAsteroids].length}
-        filteredCount={([].concat(apiAsteroids, manualAsteroids)
+        totalCount={enrichedAsteroids.length}
+        filteredCount={enrichedAsteroids
           .filter(a => viewMode === 'all' || a.source === viewMode)
           .filter(a => !filterTerm || a.name.toLowerCase().includes(filterTerm.toLowerCase()))
-          .length)}
+          .length}
       />
     </>
   );
