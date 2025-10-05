@@ -544,6 +544,7 @@ const Asteroid3DViewer = () => {
             <Button onClick={pauseContinue} variant='contained' startIcon={<PauseIcon/>} color="warning" disabled={isSimulated}>Pausar</Button>
       </div>
     </div>
+    </>
   );
 };
 
