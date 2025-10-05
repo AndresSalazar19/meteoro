@@ -102,9 +102,12 @@ export default function Simulaciones() {
 
   return (
     <>
+
+    <div className="w-screen h-[90%] flex overflow-hidden">
       {showWhatIf && (
         <WhatIfPanel onSimulate={handleSimulate} onViewStateChange={() => setShowWhatIf(false)} />
       )}
+      <div className="w-[70%] bg-gray-800 flex items-center justify-center text-white overflow-hidden">
       <Asteorid3Dviewer
         asteroids={[...apiAsteroids, ...manualAsteroids]}
         onAsteroidsLoaded={(list) => setApiAsteroids(list)}
@@ -114,6 +117,9 @@ export default function Simulaciones() {
         selectedAsteroid={selectedAsteroid} // <-- Pasa el asteroide seleccionado para que el viewer lo resalte/enfoque
       />
 
+      </div>
+
+      <div className="w-[30%] bg-gray-200 flex items-center justify-center text-black">
       <SimulationOverlay
         asteroids={[...apiAsteroids, ...manualAsteroids]}
         asteroid={selectedAsteroid} // <-- Pasa el asteroide seleccionado, esto
@@ -129,6 +135,8 @@ export default function Simulaciones() {
           .filter(a => !filterTerm || a.name.toLowerCase().includes(filterTerm.toLowerCase()))
           .length)}
       />
+      </div>
+    </div>
     </>
   );
 }
