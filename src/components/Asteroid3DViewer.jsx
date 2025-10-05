@@ -13,9 +13,7 @@ function Asteroid3DViewer({ onAsteroidsLoaded, onAsteroidSimulated, asteroids = 
   // Efecto: resaltar asteroide cuando selectedAsteroid cambia desde fuera
   useEffect(() => {
     if (!selectedAsteroid || !asteroidMeshesRef.current.length) return;
-    // Buscar el mesh correspondiente por nombre (idealmente usar id único)
     const mesh = asteroidMeshesRef.current.find(m => m.userData?.name === selectedAsteroid.name);
-    // Quitar resaltado al anterior
     if (selectedAsteroidRef.current && selectedAsteroidRef.current !== mesh) {
       selectedAsteroidRef.current.material.emissive.setHex(0x000000);
     }
@@ -24,6 +22,7 @@ function Asteroid3DViewer({ onAsteroidsLoaded, onAsteroidSimulated, asteroids = 
       selectedAsteroidRef.current = mesh;
     }
   }, [selectedAsteroid]);
+
   const mountRef = useRef(null);
   const cameraRef = useRef(null);
   const earthRef = useRef(null);
@@ -31,16 +30,16 @@ function Asteroid3DViewer({ onAsteroidsLoaded, onAsteroidSimulated, asteroids = 
   const moonRotationRef = useRef(true);
   const raycaster = new THREE.Raycaster();
   const mouse = new THREE.Vector2();
-    // Fog sphere (versión inicial) y nuevo sistema de humo basado en sprites
-  const fogSphereRef = useRef(null); // (Opcional) esfera suave
+  
+  const fogSphereRef = useRef(null);
   const fogStateRef = useRef({ active: false, progress: 0, duration: 180, maxOpacity: 0.45 });
-  // Grupo de sprites de humo
   const smokeGroupRef = useRef(null);
   const smokeStateRef = useRef({ active: false, progress: 0, duration: 240 });
-  // Materiales de la Tierra (original / impactado)
+  
   const earthOriginalMaterialRef = useRef(null);
   const earthImpactedMaterialRef = useRef(null);
   const earthOriginalEmissiveRef = useRef({ color: null, intensity: null });
+  
   const cameraTransitionRef = useRef({ 
     active: false,
     fromPos: new THREE.Vector3(),
@@ -50,19 +49,19 @@ function Asteroid3DViewer({ onAsteroidsLoaded, onAsteroidSimulated, asteroids = 
     progress: 0,
     duration: 100 
   });
+  
   const asteroidMeshesRef = useRef([]);
   const simulationModeRef = useRef('orbit');
   const selectedAsteroidRef = useRef(null);
   const [isSimulated, setIsSimulated] = useState(false);
   const [isPaused, setIsPaused] = useState(false);
-  // Nuevos refs para efectos de impacto escalonados
-  const shockwavesRef = useRef([]); // almacena ondas expansivas activas
-  const originalEarthColorRef = useRef(null); // para restaurar color original
-  const fogRef = useRef(null); // referencia a la neblina añadida
-  const impactEffectAppliedRef = useRef(false); // evita aplicar efecto doble
+  const shockwavesRef = useRef([]);
+  const originalEarthColorRef = useRef(null);
+  const impactEffectAppliedRef = useRef(false);
 
-  // ========= Lógica de energía y nivel de peligro (replicada de SimulationOverlay) =========
-  const DEFAULT_DENSITY = 3000; // kg/m^3
+  // Lógica de energía y nivel de peligro
+  const DEFAULT_DENSITY = 3000;
+  
   const computeEnergyMt = (radiusKm, velocityKmS, density = DEFAULT_DENSITY) => {
     if (!Number.isFinite(radiusKm) || radiusKm <= 0 || !Number.isFinite(velocityKmS) || velocityKmS <= 0) return 0;
     const r_m = radiusKm * 1000;
@@ -70,14 +69,16 @@ function Asteroid3DViewer({ onAsteroidsLoaded, onAsteroidSimulated, asteroids = 
     const volume_m3 = (4 / 3) * Math.PI * Math.pow(r_m, 3);
     const mass_kg = density * volume_m3;
     const energyJ = 0.5 * mass_kg * Math.pow(v_ms, 2);
-    return energyJ / 4.184e15; // Megatones
+    return energyJ / 4.184e15;
   };
+  
   const severityFromEnergyMt = (energyMt) => {
     if (energyMt >= 1000) return { key: "E3_CATASTROPHIC", label: "Catastrófica" };
     if (energyMt >= 10)   return { key: "E2_SEVERE",       label: "Severa" };
     if (energyMt >= 0.1)  return { key: "E1_SIGNIFICANT",  label: "Significativa" };
     return { key: "E0_MINI", label: "Mínima" };
   };
+  
   const combineDangerLevelLocal = (severityFlag, energyClassKey) => {
     const isPHA = severityFlag === 'HIGH';
     if (energyClassKey === 'E3_CATASTROPHIC') return { nivel: 'Extremo',  desc: 'Impacto con efectos globales' };
@@ -85,28 +86,45 @@ function Asteroid3DViewer({ onAsteroidsLoaded, onAsteroidSimulated, asteroids = 
     if (energyClassKey === 'E1_SIGNIFICANT')  return { nivel: isPHA ? 'Moderado' : 'Bajo',  desc: isPHA ? 'Daños de ciudad probables' : 'Daños de ciudad posibles' };
     return { nivel: 'Bajo', desc: 'Airburst/daños locales menores' };
   };
+  
   const decideImpactEffect = (asteroid) => {
-    if (!asteroid) return;
-    const radiusKm = asteroid.userData?.orbit?.size || asteroid.userData?.size || 0; // size es radio
-    const velocityKmS = asteroid.userData?.orbit?.velocity || asteroid.userData?.velocity || 0;
+    if (!asteroid) {
+      console.warn('decideImpactEffect: no asteroid provided');
+      return;
+    }
+    
+    const orbitData = asteroid.userData?.orbit || {};
+    const radiusKm = orbitData.size || asteroid.userData?.size || 0.05;
+    const velocityKmS = orbitData.velocity || orbitData.velocityKms || asteroid.userData?.velocity || 20;
+    const severity = orbitData.severity || asteroid.userData?.severity || 'LOW';
+    
     const energyMt = computeEnergyMt(radiusKm, velocityKmS);
     const eClass = severityFromEnergyMt(energyMt);
-    const danger = combineDangerLevelLocal(asteroid.userData?.orbit?.severity || asteroid.userData?.severity || 'LOW', eClass.key);
+    const danger = combineDangerLevelLocal(severity, eClass.key);
     const nivel = danger.nivel;
-    // Mapeo solicitado:
-    // Bajo -> primerImpacto
-    // Moderado -> segundoImpacto
-    // Alto / Extremo -> tercer impacto
+    
+    console.log('Impacto detectado:', {
+      name: asteroid.userData?.name,
+      radiusKm,
+      velocityKmS,
+      energyMt,
+      severity,
+      energyClass: eClass.key,
+      nivelPeligro: nivel
+    });
+    
     if (nivel === 'Bajo') {
+      console.log('Aplicando primer impacto (nivel Bajo)');
       primerImpacto();
     } else if (nivel === 'Moderado') {
+      console.log('Aplicando segundo impacto (nivel Moderado)');
       segundoImpacto();
-    } else { // 'Alto' o 'Extremo'
+    } else {
+      console.log('Aplicando tercer impacto (nivel Alto/Extremo)');
       tercer_Impacto();
     }
   };
 
-  // Scene-wide constants available to both the mount effect and prop-change effect
   const R_EARTH_SCENE = 63.78;
   const EARTH_ORBIT_IN_EARTH_RADII = 50;
   const ORBIT_SCALE = R_EARTH_SCENE * EARTH_ORBIT_IN_EARTH_RADII;
@@ -114,19 +132,19 @@ function Asteroid3DViewer({ onAsteroidsLoaded, onAsteroidSimulated, asteroids = 
   const ASTEROID_UNIFORM_SCALE = 100;
   const MAX_SCENE_RADIUS = R_EARTH_SCENE * 0.6;
 
-  // Refs to objects created inside the mount effect so other effects can access them
   const sceneRef = useRef(null);
   const orbitGroupRef = useRef(null);
 
-  // Helper to add asteroid data into the scene; safe to call from any effect after mount
   const addAsteroidsToScene = (dataList) => {
     if (!sceneRef.current || !orbitGroupRef.current) return;
     const orbitGroup = orbitGroupRef.current;
+    
     dataList.forEach((data) => {
       try {
         const scaledA = data.a * ORBIT_SCALE;
         const orbitPoints = [];
         const segments = 128;
+        
         for (let j = 0; j <= segments; j++) {
           const theta = (j / segments) * Math.PI * 2;
           const r = (scaledA * (1 - data.e * data.e)) / (1 + data.e * Math.cos(theta));
@@ -180,14 +198,11 @@ function Asteroid3DViewer({ onAsteroidsLoaded, onAsteroidSimulated, asteroids = 
       return;
     }
 
-    // Si ya se inició la simulación, no se permite re-simular
     if (isSimulated) return;
-    // Se ignora el estado de pausa al simular
     setIsPaused(false);
     setIsSimulated(true);
 
-
-       if (onAsteroidSimulated) {
+    if (onAsteroidSimulated) {
       onAsteroidSimulated({
         name: asteroid.userData.name,
         a: asteroid.userData.orbit.a,
@@ -199,13 +214,9 @@ function Asteroid3DViewer({ onAsteroidsLoaded, onAsteroidSimulated, asteroids = 
       });
     }
 
-    // Dirección desde el asteroide hacia el objetivo (origen)
     const directionToOrigin = new THREE.Vector3().subVectors(new THREE.Vector3(0,0,0), asteroid.position).normalize();
-    // Determinar un offset dinámico en función del tamaño del asteroide
-   const asteroidRadius = asteroid.geometry?.parameters?.radius || (asteroid.userData?.size ? asteroid.userData.size * 100 : 10);
-    // Alejamos un poco más para asegurar que la Tierra siga siendo visible mientras seguimos la trayectoria
-   const distanceBehind = Math.max(asteroidRadius * 20, 400); // distancia mínima aumentada
-    // Posicionar la cámara detrás del asteroide (opuesto a la dirección hacia el origen)
+    const asteroidRadius = asteroid.geometry?.parameters?.radius || (asteroid.userData?.size ? asteroid.userData.size * 100 : 10);
+    const distanceBehind = Math.max(asteroidRadius * 20, 400);
     const cameraTargetPos = asteroid.position.clone().add(directionToOrigin.clone().multiplyScalar(-distanceBehind));
     const cameraTargetLook = asteroid.position.clone();
 
@@ -249,7 +260,6 @@ function Asteroid3DViewer({ onAsteroidsLoaded, onAsteroidSimulated, asteroids = 
     moonRotationRef.current = true;
     impactEffectAppliedRef.current = false;
 
-    // Reset asteroides
     asteroidMeshesRef.current.forEach(ast => {
       if (ast.userData.impactPath) {
         ast.userData.isImpacting = false;
@@ -257,7 +267,6 @@ function Asteroid3DViewer({ onAsteroidsLoaded, onAsteroidSimulated, asteroids = 
         ast.userData.trail?.line?.parent?.remove(ast.userData.trail.line);
         ast.userData.trail = null;
       }
-      // Regresar a primer punto orbital
       if (ast.userData.orbitPoints && ast.userData.orbitPoints.length) {
         ast.position.copy(ast.userData.orbitPoints[0]);
         ast.userData.currentIndex = 0;
@@ -267,14 +276,13 @@ function Asteroid3DViewer({ onAsteroidsLoaded, onAsteroidSimulated, asteroids = 
 
     selectedAsteroidRef.current = null;
 
-    // Restaurar material original (textura Tierra)
     if (earthOriginalMaterialRef.current && earthRef.current) {
       earthRef.current.material = earthOriginalMaterialRef.current;
       earthRef.current.material.needsUpdate = true;
     } else if (earthRef.current?.material?.color && originalEarthColorRef.current) {
       earthRef.current.material.color.copy(originalEarthColorRef.current);
     }
-    // Restaurar emisivo si fue alterado
+    
     if (earthRef.current?.material && earthOriginalEmissiveRef.current.color) {
       const mat = earthRef.current.material;
       if (mat.emissive) {
@@ -285,27 +293,22 @@ function Asteroid3DViewer({ onAsteroidsLoaded, onAsteroidSimulated, asteroids = 
       }
     }
 
-    // Quitar fog global (scene.fog)
     if (sceneRef.current) {
       sceneRef.current.fog = null;
     }
-    fogRef.current = null;
 
-    // Apagar humo sprites
     smokeStateRef.current.active = false;
     if (smokeGroupRef.current) {
       smokeGroupRef.current.visible = false;
       smokeGroupRef.current.children.forEach(sp => { sp.material.opacity = 0; });
     }
 
-    // Apagar fog sphere animada
     fogStateRef.current.active = false;
     if (fogSphereRef.current) {
       fogSphereRef.current.visible = false;
       fogSphereRef.current.material.opacity = 0;
     }
 
-    // Eliminar ondas expansivas pendientes
     shockwavesRef.current.forEach(sw => {
       if (sw.mesh) {
         sceneRef.current?.remove(sw.mesh);
@@ -313,17 +316,12 @@ function Asteroid3DViewer({ onAsteroidsLoaded, onAsteroidSimulated, asteroids = 
         sw.mesh.material?.dispose();
       }
     });
-    shockwavesRef.current = { current: [] }; // forzar limpieza (o usar length=0 si fuera array directo)
     shockwavesRef.current = [];
 
     setIsSimulated(false);
-    setIsPaused(false); // mostrará botón Pausar nuevamente
+    setIsPaused(false);
   };
 
-  /**
-   * Crea una pequeña onda expansiva (primer impacto) alrededor de la Tierra.
-   * No agrega neblina ni cambia el color del planeta.
-   */
   const primerImpacto = () => {
     if (!sceneRef.current || !earthRef.current) return;
     crearOndaExpansiva({
@@ -335,33 +333,19 @@ function Asteroid3DViewer({ onAsteroidsLoaded, onAsteroidSimulated, asteroids = 
     });
   };
 
-  /**
-   * Segundo impacto: muestra neblina naranja alrededor de la Tierra (fog sphere) sin cambiar su color
-   * y SIN onda expansiva.
-   */
   const segundoImpacto = () => {
     if (!sceneRef.current || !earthRef.current) return;
     if (fogSphereRef.current) {
       fogSphereRef.current.visible = true;
-      // Color naranja translúcido
       fogSphereRef.current.material.color.set(0xff6a00);
-      fogSphereRef.current.material.opacity = 0; // comenzará desde 0
+      fogSphereRef.current.material.opacity = 0;
       fogStateRef.current.active = true;
       fogStateRef.current.progress = 0;
-      // Ajustar duración y opacidad máxima para este caso
-      fogStateRef.current.duration = 220; // frames aproximados (ligeramente más larga)
-      fogStateRef.current.maxOpacity = 0.5; // un poco más densa que la default 0.45
+      fogStateRef.current.duration = 220;
+      fogStateRef.current.maxOpacity = 0.5;
     }
   };
 
-  /**
-   * Utilidad para crear una onda expansiva circular que se expande y desvanece.
-   * @param {Object} cfg
-   * @param {number} cfg.color - color de la onda
-   * @param {number} cfg.duracion - duración en ms
-   * @param {number} cfg.escalaFinal - factor de escala final relativo
-   * @param {number} cfg.opacidadInicial - opacidad inicial
-   */
   const crearOndaExpansiva = (cfg = {}) => {
     if (!sceneRef.current || !earthRef.current) return;
     const {
@@ -372,12 +356,10 @@ function Asteroid3DViewer({ onAsteroidsLoaded, onAsteroidSimulated, asteroids = 
       thicknessFactor = 1
     } = cfg;
 
-    // Grosor base: 0.005 * R_EARTH_SCENE (como configuración original). Se escala por thicknessFactor.
     const innerR = R_EARTH_SCENE * 1.01;
     const ringThickness = R_EARTH_SCENE * 0.005 * thicknessFactor;
     const outerR = innerR + ringThickness;
     const ringGeo = new THREE.RingGeometry(innerR, outerR, 96);
-    // Material con blending aditivo para efecto luminoso suave
     const ringMat = new THREE.MeshBasicMaterial({
       color,
       transparent: true,
@@ -387,7 +369,6 @@ function Asteroid3DViewer({ onAsteroidsLoaded, onAsteroidSimulated, asteroids = 
       depthWrite: false
     });
     const ring = new THREE.Mesh(ringGeo, ringMat);
-    // Orientar la onda expansiva: alineada al ecuador terrestre (puede ajustarse)
     ring.rotation.x = Math.PI / 2;
     ring.position.copy(earthRef.current.position);
     sceneRef.current.add(ring);
@@ -413,9 +394,7 @@ function Asteroid3DViewer({ onAsteroidsLoaded, onAsteroidSimulated, asteroids = 
     }
   };
 
-  // Función caso 3
   const tercer_Impacto = () => {
-    // Forzar cambio de textura de la Tierra a 2k_makemake_fictional.jpg
     if (earthRef.current) {
       const loader = new THREE.TextureLoader();
       const aplicarMaterialImpacto = (mapa) => {
@@ -429,8 +408,8 @@ function Asteroid3DViewer({ onAsteroidsLoaded, onAsteroidSimulated, asteroids = 
         earthRef.current.material = nuevoMat;
         earthRef.current.material.needsUpdate = true;
       };
+      
       if (earthImpactedMaterialRef.current) {
-        // Ya teníamos un material precargado
         earthRef.current.material = earthImpactedMaterialRef.current;
         earthRef.current.material.needsUpdate = true;
       } else {
@@ -441,12 +420,11 @@ function Asteroid3DViewer({ onAsteroidsLoaded, onAsteroidSimulated, asteroids = 
             earthImpactedMaterialRef.current = earthRef.current.material;
           },
           undefined,
-          () => { /* fallo al cargar textura de impacto: se ignora y se mantiene material original */ }
+          () => {}
         );
       }
     }
 
-    // Activar humo principal
     if (smokeGroupRef.current) {
       smokeStateRef.current.active = true;
       smokeStateRef.current.progress = 0;
@@ -454,19 +432,15 @@ function Asteroid3DViewer({ onAsteroidsLoaded, onAsteroidSimulated, asteroids = 
       smokeGroupRef.current.children.forEach(sprite => {
         sprite.material.opacity = 0;
         const { normal } = sprite.userData;
-        // Reposicionar ligeramente para reiniciar el efecto
         sprite.position.copy(normal.clone().multiplyScalar(earthRef.current ? earthRef.current.geometry.parameters.radius * (1.05 + Math.random()*0.02) : 65));
       });
-    } else if (fogRef.current) {
-      // Fallback a esfera difusa
+    } else if (fogSphereRef.current) {
       fogStateRef.current.active = true;
       fogStateRef.current.progress = 0;
-  fogSphereRef.current.visible = true;
-  fogSphereRef.current.material.opacity = 0;
+      fogSphereRef.current.visible = true;
+      fogSphereRef.current.material.opacity = 0;
     }
   };
-  // Alias sin guion bajo por si se requiere coherencia con naming solicitado
-  const tercerImpacto = () => tercer_Impacto();
 
   useEffect(() => {
     const mount = mountRef.current;
@@ -476,8 +450,6 @@ function Asteroid3DViewer({ onAsteroidsLoaded, onAsteroidSimulated, asteroids = 
     sceneRef.current = scene;
     const earthSystem = new THREE.Group();
     scene.add(earthSystem);
-    
-  // (constants are defined in component scope)
 
     let cameraDistance = 1000;
     cameraRef.current = new THREE.PerspectiveCamera(75, mount.clientWidth / mount.clientHeight, 0.1, 20000);
@@ -511,7 +483,7 @@ function Asteroid3DViewer({ onAsteroidsLoaded, onAsteroidSimulated, asteroids = 
         earthSystem.add(earth);
         earthRef.current = earth;
         earthOriginalMaterialRef.current = earthMaterial;
-        // Intentar cargar textura específica de impacto si existe
+        
         textureLoader.load(
           '/2k_makemake_fictional.jpg',
           (impactTex) => {
@@ -524,7 +496,7 @@ function Asteroid3DViewer({ onAsteroidsLoaded, onAsteroidSimulated, asteroids = 
             });
           },
           undefined,
-          () => { /* si falla, se mantiene la versión tintada */ }
+          () => {}
         );
       },
       undefined,
@@ -540,21 +512,6 @@ function Asteroid3DViewer({ onAsteroidsLoaded, onAsteroidSimulated, asteroids = 
         earth.userData = { name: 'Earth', type: 'planet', radius: 6371 };
         earthSystem.add(earth);
         earthRef.current = earth;
-        // Intentar igualmente cargar textura específica
-        textureLoader.load(
-          '/2k_makemake_fictional.jpg',
-          (impactTex) => {
-            earthImpactedMaterialRef.current = new THREE.MeshPhongMaterial({
-              map: impactTex,
-              emissive: 0x441100,
-              emissiveIntensity: 0.8,
-              specular: 0x111111,
-              shininess: 6
-            });
-          },
-          undefined,
-          () => {}
-        );
       }
     );
 
@@ -568,7 +525,6 @@ function Asteroid3DViewer({ onAsteroidsLoaded, onAsteroidSimulated, asteroids = 
     const atmosphere = new THREE.Mesh(atmosphereGeometry, atmosphereMaterial);
     earthSystem.add(atmosphere);
 
-    // --- Fog sphere (opcional) ---
     const fogGeometry = new THREE.SphereGeometry(R_EARTH_SCENE * 1.25, 64, 64);
     const fogMaterial = new THREE.MeshBasicMaterial({
       color: 0xffffff,
@@ -581,17 +537,14 @@ function Asteroid3DViewer({ onAsteroidsLoaded, onAsteroidSimulated, asteroids = 
     const fogSphere = new THREE.Mesh(fogGeometry, fogMaterial);
     fogSphere.visible = false;
     earthSystem.add(fogSphere);
-    fogRef.current = fogSphere;
+    fogSphereRef.current = fogSphere;
 
-    // --- Procedural smoke sprites ---
     const generateSmokeTexture = () => {
       const size = 128;
       const canvas = document.createElement('canvas');
       canvas.width = size; canvas.height = size;
       const ctx = canvas.getContext('2d');
-      // Fondo transparente
       ctx.clearRect(0,0,size,size);
-      // Dibujar varias nubes circulares semi-translúcidas superpuestas para bordes irregulares
       const puffs = 10;
       for (let i=0;i<puffs;i++) {
         const r = size * (0.25 + Math.random()*0.35);
@@ -617,21 +570,20 @@ function Asteroid3DViewer({ onAsteroidsLoaded, onAsteroidSimulated, asteroids = 
     const createSmokeCloud = () => {
       const group = new THREE.Group();
       const texture = generateSmokeTexture();
-      const SPRITES = 42; // cantidad de parches de humo
+      const SPRITES = 42;
       for (let i=0;i<SPRITES;i++) {
         const material = new THREE.SpriteMaterial({
           map: texture,
-            transparent: true,
-            depthWrite: false,
-            depthTest: true,
-            opacity: 0,
-            blending: THREE.NormalBlending,
-            color: 0xffffff
+          transparent: true,
+          depthWrite: false,
+          depthTest: true,
+          opacity: 0,
+          blending: THREE.NormalBlending,
+          color: 0xffffff
         });
         const sprite = new THREE.Sprite(material);
-        // Distribuir alrededor de la esfera con una ligera variación radial
-        const theta = Math.acos(2*Math.random()-1); // polar
-        const phi = 2*Math.PI*Math.random(); // azimut
+        const theta = Math.acos(2*Math.random()-1);
+        const phi = 2*Math.PI*Math.random();
         const normal = new THREE.Vector3(
           Math.sin(theta)*Math.cos(phi),
           Math.cos(theta),
@@ -657,8 +609,8 @@ function Asteroid3DViewer({ onAsteroidsLoaded, onAsteroidSimulated, asteroids = 
     createSmokeCloud();
 
     const orbitGroup = new THREE.Group();
-  scene.add(orbitGroup);
-  orbitGroupRef.current = orbitGroup;
+    scene.add(orbitGroup);
+    orbitGroupRef.current = orbitGroup;
 
     const moonRadius = R_EARTH_SCENE * 0.27;
     const moonDistance = R_EARTH_SCENE * 10;
@@ -711,85 +663,82 @@ function Asteroid3DViewer({ onAsteroidsLoaded, onAsteroidSimulated, asteroids = 
 
     const randomColor = () => Math.floor(Math.random() * 0xffffff);
 
-  // use the outer addAsteroidsToScene defined in component scope
-
     const controller = new AbortController();
     const API_KEY = import.meta.env.VITE_NASA_API_KEY || '2KzpzDksQWT2D2csD9Ja9wrdX8ruTcS290hH2mBK';
     const FEED_URL = `https://api.nasa.gov/neo/rest/v1/feed?start_date=2025-12-19&end_date=2025-12-26&api_key=${API_KEY}`;
 
-  const fetchAsteroids = async () => {
-    try {
-      const res = await fetch(FEED_URL, { signal: controller.signal });
-      if (!res.ok) throw new Error('Error al obtener feed NEO');
-      const feed = await res.json();
-      const byDate = feed.near_earth_objects || {};
-      const neoList = [];
-      Object.values(byDate).forEach((arr) => {
-        if (Array.isArray(arr)) neoList.push(...arr);
-      });
-      
-      const links = Array.from(
-        new Set(
-          neoList
-            .map(n => n.links?.self)
-            .filter(Boolean)
-            .map(url => url.replace('http://', 'https://'))
-        )
-      );
-
-      const fetchPromises = links.map(async (url) => {
-        try {
-          const r = await fetch(url, { signal: controller.signal });
-          if (!r.ok) return null;
-          const neo = await r.json();
-          const orbital = neo.orbital_data || {};
-          const kmData = neo.estimated_diameter?.kilometers;
-          const dMin = kmData?.estimated_diameter_min;
-          const dMax = kmData?.estimated_diameter_max;
-          const avgDiameterKm = (dMin + dMax) / 2;
-          const radiusKm = avgDiameterKm / 2;
-          
-          // Calcular velocidad aproximada (puedes ajustar esto)
-          const velocity = parseFloat(orbital.orbital_period) 
-            ? (2 * Math.PI * parseFloat(orbital.semi_major_axis) * 149597870.7) / 
-              (parseFloat(orbital.orbital_period) * 365.25 * 86400)
-            : null;
-
-          return {
-            name: neo.name || neo.designation || 'NEO',
-            a: parseFloat(orbital.semi_major_axis) || 1,
-            e: parseFloat(orbital.eccentricity) || 0,
-            i: parseFloat(orbital.inclination) || 0,
-            size: typeof radiusKm === 'number' ? radiusKm : 0.05,
-            velocityKms: velocity,
-            color: randomColor(),
-            source: 'api',
-            severity: neo.is_potentially_hazardous_asteroid ? 'HIGH' : 'LOW'
-          };
-        } catch {
-          return null;
-        }
-      });
-
-      const results = await Promise.all(fetchPromises);
-      const detailed = results.filter(r => r !== null);
-      
-      if (detailed.length) {
-        addAsteroidsToScene(detailed);
+    const fetchAsteroids = async () => {
+      try {
+        const res = await fetch(FEED_URL, { signal: controller.signal });
+        if (!res.ok) throw new Error('Error al obtener feed NEO');
+        const feed = await res.json();
+        const byDate = feed.near_earth_objects || {};
+        const neoList = [];
+        Object.values(byDate).forEach((arr) => {
+          if (Array.isArray(arr)) neoList.push(...arr);
+        });
         
-        // Notificar al padre con la lista completa de asteroides
-        if (onAsteroidsLoaded) {
-          onAsteroidsLoaded(detailed);
+        const links = Array.from(
+          new Set(
+            neoList
+              .map(n => n.links?.self)
+              .filter(Boolean)
+              .map(url => url.replace('http://', 'https://'))
+          )
+        );
+
+        const fetchPromises = links.map(async (url) => {
+          try {
+            const r = await fetch(url, { signal: controller.signal });
+            if (!r.ok) return null;
+            const neo = await r.json();
+            const orbital = neo.orbital_data || {};
+            const kmData = neo.estimated_diameter?.kilometers;
+            const dMin = kmData?.estimated_diameter_min;
+            const dMax = kmData?.estimated_diameter_max;
+            const avgDiameterKm = (dMin + dMax) / 2;
+            const radiusKm = avgDiameterKm / 2;
+            
+            const velocity = parseFloat(orbital.orbital_period) 
+              ? (2 * Math.PI * parseFloat(orbital.semi_major_axis) * 149597870.7) / 
+                (parseFloat(orbital.orbital_period) * 365.25 * 86400)
+              : null;
+
+            return {
+              name: neo.name || neo.designation || 'NEO',
+              a: parseFloat(orbital.semi_major_axis) || 1,
+              e: parseFloat(orbital.eccentricity) || 0,
+              i: parseFloat(orbital.inclination) || 0,
+              size: typeof radiusKm === 'number' ? radiusKm : 0.05,
+              velocity: velocity,
+              velocityKms: velocity,
+              color: randomColor(),
+              source: 'api',
+              severity: neo.is_potentially_hazardous_asteroid ? 'HIGH' : 'LOW'
+            };
+          } catch {
+            return null;
+          }
+        });
+
+        const results = await Promise.all(fetchPromises);
+        const detailed = results.filter(r => r !== null);
+        
+        if (detailed.length) {
+          addAsteroidsToScene(detailed);
+          
+          if (onAsteroidsLoaded) {
+            onAsteroidsLoaded(detailed);
+          }
+        }
+      } catch (e) {
+        if (e.name !== 'AbortError') {
+          console.error('Error obteniendo asteroides:', e);
         }
       }
-    } catch (e) {
-      if (e.name !== 'AbortError') {
-        console.error('Error obteniendo asteroides:', e);
-      }
-    }
-  };
+    };
 
-  fetchAsteroids();
+    fetchAsteroids();
 
     const starsGeometry = new THREE.BufferGeometry();
     const starsMaterial = new THREE.PointsMaterial({ 
@@ -838,9 +787,8 @@ function Asteroid3DViewer({ onAsteroidsLoaded, onAsteroidSimulated, asteroids = 
       cameraDistance = Math.max(100, Math.min(2000, cameraDistance));
     };
 
-    // Evento de click para asteroides
     const onClick = (event) => {
-      if (isDragging) return; // evitar click si se está arrastrando
+      if (isDragging) return;
       const rect = renderer.domElement.getBoundingClientRect();
       mouse.x = ((event.clientX - rect.left) / rect.width) * 2 - 1;
       mouse.y = -((event.clientY - rect.top) / rect.height) * 2 + 1;
@@ -852,33 +800,33 @@ function Asteroid3DViewer({ onAsteroidsLoaded, onAsteroidSimulated, asteroids = 
           if (selectedAsteroidRef.current && selectedAsteroidRef.current !== asteroid) {
             selectedAsteroidRef.current.material.emissive.setHex(0x000000);
           }
-          asteroid.material.emissive = new THREE.Color(0xffff00); // color amarillo brillante
+          asteroid.material.emissive = new THREE.Color(0xffff00);
           selectedAsteroidRef.current = asteroid;
-          // Enviar todos los datos relevantes del asteroide
           const orbit = asteroid.userData.orbit || {};
-          onAsteroidSimulated({
-            name: asteroid.userData.name,
-            a: orbit.a,
-            e: orbit.e,
-            i: orbit.i,
-            diameterKm: (typeof orbit.size === 'number' ? orbit.size * 2 : undefined),
-            size: orbit.size,
-            velocity: orbit.velocity || asteroid.userData.velocity || null,
-            velocityKms: orbit.velocity || asteroid.userData.velocity || null,
-            severity: orbit.severity || asteroid.userData.severity || 'LOW',
-            source: asteroid.userData.source || 'api',
-            color: asteroid.userData.color,
-            // Puedes agregar más campos si los necesitas
-          });
+          if (onAsteroidSimulated) {
+            onAsteroidSimulated({
+              name: asteroid.userData.name,
+              a: orbit.a,
+              e: orbit.e,
+              i: orbit.i,
+              diameterKm: (typeof orbit.size === 'number' ? orbit.size * 2 : undefined),
+              size: orbit.size,
+              velocity: orbit.velocity || asteroid.userData.velocity || null,
+              velocityKms: orbit.velocity || asteroid.userData.velocity || null,
+              severity: orbit.severity || asteroid.userData.severity || 'LOW',
+              source: asteroid.userData.source || 'api',
+              color: asteroid.userData.color
+            });
+          }
         }
       }
-    }
+    };
 
     renderer.domElement.addEventListener('mousedown', onMouseDown);
     renderer.domElement.addEventListener('mousemove', onMouseMove);
     renderer.domElement.addEventListener('mouseup', onMouseUp);
     renderer.domElement.addEventListener('wheel', onWheel, { passive: false });
-    renderer.domElement.addEventListener('click', onClick);
+    renderer.domElement.addEventListener('click', onClick);
 
     let animationId;
     const animate = () => {
@@ -934,14 +882,16 @@ function Asteroid3DViewer({ onAsteroidsLoaded, onAsteroidSimulated, asteroids = 
           cameraRef.current.lookAt(lookAtPoint);
 
         } else if (path && path.progress >= 1 && !path.impactDone) {
-          console.log('¡IMPACTO!');
+          console.log('¡IMPACTO DETECTADO!');
           path.impactDone = true;
-          simulationModeRef.current = 'orbit';
-          earthRotationRef.current = true; // mantener rotación tras impacto
+          
           if (!impactEffectAppliedRef.current) {
             decideImpactEffect(threat);
             impactEffectAppliedRef.current = true;
           }
+          
+          simulationModeRef.current = 'orbit';
+          earthRotationRef.current = true;
         }
       }
 
@@ -977,26 +927,24 @@ function Asteroid3DViewer({ onAsteroidsLoaded, onAsteroidSimulated, asteroids = 
         cameraRef.current.lookAt(0, 0, 0);
       }
 
-      // Actualizar ondas expansivas activas
       if (shockwavesRef.current.length > 0) {
         const now = performance.now();
         for (let i = shockwavesRef.current.length - 1; i >= 0; i--) {
           const sw = shockwavesRef.current[i];
-            const t = (now - sw.startTime) / sw.duration;
-            if (t >= 1) {
-              sceneRef.current.remove(sw.mesh);
-              sw.mesh.geometry.dispose();
-              sw.mesh.material.dispose();
-              shockwavesRef.current.splice(i, 1);
-              continue;
-            }
-            const escala = 1 + (sw.escalaFinal - 1) * t;
-            sw.mesh.scale.set(escala, escala, escala);
-            sw.mesh.material.opacity = 1 - t;
+          const t = (now - sw.startTime) / sw.duration;
+          if (t >= 1) {
+            sceneRef.current.remove(sw.mesh);
+            sw.mesh.geometry.dispose();
+            sw.mesh.material.dispose();
+            shockwavesRef.current.splice(i, 1);
+            continue;
+          }
+          const escala = 1 + (sw.escalaFinal - 1) * t;
+          sw.mesh.scale.set(escala, escala, escala);
+          sw.mesh.material.opacity = 1 - t;
         }
       }
         
-      // Animación de esfera de fog (solo si se activa explícitamente)
       if (fogStateRef.current.active && fogSphereRef.current) {
         const f = fogStateRef.current;
         f.progress++;
@@ -1009,29 +957,31 @@ function Asteroid3DViewer({ onAsteroidsLoaded, onAsteroidSimulated, asteroids = 
         }
         fogSphereRef.current.material.opacity = opacity;
         if (f.progress >= f.duration) {
-          f.active = false; f.progress = 0; fogSphereRef.current.visible = false; fogSphereRef.current.material.opacity = 0;
+          f.active = false;
+          f.progress = 0;
+          fogSphereRef.current.visible = false;
+          fogSphereRef.current.material.opacity = 0;
         }
       }
 
-      // Animación del humo sprite (efecto principal)
       if (smokeStateRef.current.active && smokeGroupRef.current) {
         const s = smokeStateRef.current;
         s.progress++;
-        const t = s.progress / s.duration; // 0..1
+        const t = s.progress / s.duration;
         smokeGroupRef.current.children.forEach(sprite => {
           const ud = sprite.userData;
-          // Curva de opacidad: ease in (0-0.35), pico (0.35-0.55), out (0.55-1)
           let o;
-          if (t < 0.35) o = t / 0.35; else if (t < 0.55) o = 1; else o = Math.max(0, 1 - (t - 0.55)/0.45);
-          // Variación por seed para que no todo alcance 1
+          if (t < 0.35) o = t / 0.35;
+          else if (t < 0.55) o = 1;
+          else o = Math.max(0, 1 - (t - 0.55)/0.45);
           o *= 0.6 + ud.seed * 0.4;
           sprite.material.opacity = o;
-          // Escala pulsante
+          
           const pulse = 0.8 + Math.sin((t + ud.seed) * Math.PI * 2) * 0.25;
-          const growth = 1 + t * 0.9; // expansión global
+          const growth = 1 + t * 0.9;
           const scale = ud.baseScale * pulse * growth;
           sprite.scale.set(scale, scale, 1);
-          // Movimiento radial hacia afuera + ligera turbulencia
+          
           const radial = R_EARTH_SCENE * 1.05 + t * ud.radialOffset;
           const jitterAmp = 6;
           const jitter = new THREE.Vector3(
@@ -1040,11 +990,12 @@ function Asteroid3DViewer({ onAsteroidsLoaded, onAsteroidSimulated, asteroids = 
             (Math.random()-0.5)*jitterAmp*0.15
           );
           sprite.position.copy(ud.normal.clone().multiplyScalar(radial)).add(jitter);
-          // Rotación aleatoria lenta
           sprite.material.rotation += 0.001 + ud.seed * 0.004;
         });
         if (s.progress >= s.duration) {
-          s.active = false; s.progress = 0; smokeGroupRef.current.visible = false;
+          s.active = false;
+          s.progress = 0;
+          smokeGroupRef.current.visible = false;
           smokeGroupRef.current.children.forEach(sp => sp.material.opacity = 0);
         }
       }
@@ -1061,7 +1012,7 @@ function Asteroid3DViewer({ onAsteroidsLoaded, onAsteroidSimulated, asteroids = 
       renderer.domElement.removeEventListener('mousemove', onMouseMove);
       renderer.domElement.removeEventListener('mouseup', onMouseUp);
       renderer.domElement.removeEventListener('wheel', onWheel);
-      renderer.domElement.removeEventListener('click', onClick);
+      renderer.domElement.removeEventListener('click', onClick);
       renderer.dispose();
       if (renderer.domElement && mount.contains(renderer.domElement)) {
         mount.removeChild(renderer.domElement);
@@ -1069,29 +1020,22 @@ function Asteroid3DViewer({ onAsteroidsLoaded, onAsteroidSimulated, asteroids = 
     };
   }, []);
 
-  // When the `asteroids` prop changes (manual additions), add any new entries to the scene
   React.useEffect(() => {
     try {
       if (!asteroids || !asteroids.length) return;
-
-      // Ensure the scene has been initialized
       if (!sceneRef.current) return;
 
-      // Find which asteroid names are already present in the scene
       const existingNames = new Set(asteroidMeshesRef.current.map(m => m.userData?.name));
       const toAdd = asteroids.filter(a => !existingNames.has(a.name));
       if (toAdd.length === 0) return;
 
-      // Add the missing asteroids into the scene
       addAsteroidsToScene(toAdd);
-      // Optionally notify parent about API asteroids
       if (onAsteroidsLoaded) onAsteroidsLoaded(asteroids.filter(a => a.source === 'api'));
     } catch (e) {
       console.warn('Error processing asteroids prop', e);
     }
   }, [asteroids]);
 
-  // Effect: respond to viewMode / filterTerm changes by toggling visibility
   React.useEffect(() => {
     try {
       const term = (filterTerm || '').toLowerCase();
@@ -1106,13 +1050,11 @@ function Asteroid3DViewer({ onAsteroidsLoaded, onAsteroidSimulated, asteroids = 
         if (mesh.userData?.orbitLine) mesh.userData.orbitLine.visible = visible;
       });
     } catch (e) {
-      // silence any errors during live updates
       console.warn('Error applying asteroid visibility filter', e);
     }
   }, [viewMode, filterTerm, asteroids]);
  
   return (
-    <>
     <div style={{ position: 'relative', width: '100vw', height: '100vh' }}>
       <div ref={mountRef} style={{ width: '100%', height: '100%', overflow: 'hidden' }} />
       <div style={{
@@ -1125,18 +1067,47 @@ function Asteroid3DViewer({ onAsteroidsLoaded, onAsteroidSimulated, asteroids = 
         gap: '20px',
         zIndex: 10
       }}>
-        <Button onClick={() => onAsteroidClick(selectedAsteroidRef.current)}
-              variant='contained' startIcon={<PlayCircleIcon/>} color='success' disabled={isSimulated}>
-                Iniciar Simulación
-            </Button>
-            <Button onClick={reiniciar} variant='contained' startIcon={<ReplayIcon/>} color='error'>Reiniciar</Button>
-            {isPaused ? <Button onClick={pauseContinue} variant='contained' startIcon={<PlayArrowIcon/>} color="warning" disabled={isSimulated}>Continuar</Button>
-      :<Button onClick={pauseContinue} variant='contained' startIcon={<PauseIcon/>} color="warning" disabled={isSimulated}>Pausar</Button>
-      }
-            </div>
+        <Button 
+          onClick={() => onAsteroidClick(selectedAsteroidRef.current)}
+          variant='contained' 
+          startIcon={<PlayCircleIcon/>} 
+          color='success' 
+          disabled={isSimulated}
+        >
+          Iniciar Simulación
+        </Button>
+        <Button 
+          onClick={reiniciar} 
+          variant='contained' 
+          startIcon={<ReplayIcon/>} 
+          color='error'
+        >
+          Reiniciar
+        </Button>
+        {isPaused ? (
+          <Button 
+            onClick={pauseContinue} 
+            variant='contained' 
+            startIcon={<PlayArrowIcon/>} 
+            color="warning" 
+            disabled={isSimulated}
+          >
+            Continuar
+          </Button>
+        ) : (
+          <Button 
+            onClick={pauseContinue} 
+            variant='contained' 
+            startIcon={<PauseIcon/>} 
+            color="warning" 
+            disabled={isSimulated}
+          >
+            Pausar
+          </Button>
+        )}
+      </div>
     </div>
-    </>
   );
-};
+}
 
 export default Asteroid3DViewer;
