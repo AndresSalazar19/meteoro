@@ -1,9 +1,9 @@
 import { useEffect, useState } from "react";
-import { Link, useParams, useNavigate } from "react-router-dom"; // Importa useNavigate
+import { Link, useParams, useNavigate } from "react-router-dom";
 
 export default function DetalleMeteorito() {
   const { id } = useParams();
-  const navigate = useNavigate(); // Inicializa el hook de navegación
+  const navigate = useNavigate();
   const [neo, setNeo] = useState(null);
   const [loading, setLoading] = useState(true);
   
@@ -32,23 +32,9 @@ export default function DetalleMeteorito() {
   const handleSimulateClick = () => {
     if (!neo) return;
 
-    const od = neo.orbital_data || {};
-    const km = neo.estimated_diameter?.kilometers;
-
-    // Prepara los datos del asteroide en un formato que Asteroid3DViewer pueda procesar
-    const asteroidDataForSimulation = {
-      name: neo.name || neo.designation || 'NEO from API',
-      a: parseFloat(od.semi_major_axis) || 1, // AU
-      e: parseFloat(od.eccentricity) || 0,
-      i: parseFloat(od.inclination) || 0, // degrees
-      diamMinKm: km?.estimated_diameter_min,
-      diamMaxKm: km?.estimated_diameter_max,
-      H: neo.absolute_magnitude_h,
-      closeApproachData: neo.close_approach_data || [], // Pasa el array completo para el cálculo de velocidad
-    };
-
-    // Navega a la ruta de simulación, pasando los datos a través del estado
-    navigate('/meteoritos', { state: { simulatedAsteroidData: asteroidDataForSimulation } });
+    // Navega a la ruta de simulación, pasando SOLO el ID del asteroide
+    // El componente Simulaciones lo buscará en su propia lista de apiAsteroids
+    navigate('/simulaciones', { state: { selectedAsteroidId: neo.id }, replace: true });
   };
 
   if (loading) return <div className="max-w-3xl mx-auto px-4 py-6 text-left text-white/80">Cargando…</div>;
