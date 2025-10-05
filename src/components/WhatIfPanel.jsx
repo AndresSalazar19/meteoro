@@ -9,7 +9,7 @@ const WhatIfForm = ({ onSimulate, onViewStateChange }) => {
     diamMin: '0.1',
     diamMax: '0.2',
     absoluteMagnitude: '20',
-    velocity: '15'
+    velocity: '15',
   });
 
   const handleChange = (field, value) => {

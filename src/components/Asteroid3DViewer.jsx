@@ -21,6 +21,7 @@ const Asteroid3DViewer = ({ newAsteroidData }) => {
     duration: 100 
   });
   const asteroidMeshesRef = useRef([]);
+  const asteroidMeshesRefPre = useRef([]);
   const simulationModeRef = useRef('orbit');
   const threatAsteroidRef = useRef(null);
 
@@ -286,6 +287,7 @@ const Asteroid3DViewer = ({ newAsteroidData }) => {
         asteroid.position.copy(orbitPoints[0]);
         scene.add(asteroid);
         asteroidMeshesRef.current.push(asteroid);
+      console.log(`Asteroide  añadido a la escena y a asteroidMeshesRef.`, asteroid); 
       });
     };
 
